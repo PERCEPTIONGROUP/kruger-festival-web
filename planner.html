@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Krüger festival – plattegrond-planner</title>
+<style>
+:root{--ink:#1f2328;--mut:#667085;--line:#d7dbe2;--bg:#eef0f3;--card:#fff;--acc:#1d4ed8;--bad:#dc2626;--warn:#d97706;--ok:#15803d}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;font:13.5px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg)}
+#app{display:grid;grid-template-columns:200px minmax(0,1fr) 290px;grid-template-rows:auto minmax(0,1fr) auto;height:100vh}
+header{grid-column:1/4;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;background:var(--card);border-bottom:1px solid var(--line)}
+header h1{font-size:15px;margin:0 10px 0 0}
+button{font:inherit;padding:5px 9px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);cursor:pointer}
+button:hover{background:#f3f4f6}button.on{background:#dbeafe;border-color:#93c5fd}button.danger{color:var(--bad)}
+#status{margin-left:auto;font-weight:600;padding:4px 10px;border-radius:999px}
+#status.ok{background:#dcfce7;color:var(--ok)}#status.bad{background:#fee2e2;color:var(--bad)}
+aside{background:var(--card);overflow:auto;padding:10px 12px}
+#left{border-right:1px solid var(--line)}#right{border-left:1px solid var(--line)}
+aside h2{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:12px 0 6px}aside h2:first-child{margin-top:0}
+#left button{display:block;width:100%;text-align:left;margin-bottom:4px}
+#stage{position:relative;overflow:hidden;background:#dfe3e8}
+svg#svg{width:100%;height:100%;display:block;touch-action:none;cursor:grab;background:#dfe3e8}
+svg .obj{cursor:move}svg .hdl{cursor:crosshair}
+footer{grid-column:1/4;padding:5px 12px;background:var(--card);border-top:1px solid var(--line);color:var(--mut);font-size:12.5px;display:flex;gap:18px;flex-wrap:wrap}
+label.f{display:grid;grid-template-columns:86px 1fr;align-items:center;gap:6px;margin-bottom:5px}
+input[type=text],input[type=number]{font:inherit;width:100%;padding:4px 6px;border:1px solid var(--line);border-radius:6px}
+.row{display:flex;gap:5px;flex-wrap:wrap;margin:6px 0}
+#msgs div{padding:6px 8px;border-radius:7px;margin-bottom:5px;cursor:pointer;border:1px solid transparent}
+#msgs .h{background:#fee2e2;border-color:#fecaca}#msgs .s{background:#fef3c7;border-color:#fde68a}#msgs b{display:block}
+#none{color:var(--mut)}
+#toast{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);background:#7f1d1d;color:#fff;padding:9px 14px;border-radius:9px;max-width:80%;display:none;box-shadow:0 6px 20px rgba(0,0,0,.25);z-index:5}
+#toast.good{background:#14532d}
+@media (max-width:900px){#app{grid-template-columns:150px minmax(0,1fr)}#right{grid-column:1/3;max-height:32vh;border-left:0;border-top:1px solid var(--line)}header,footer{grid-column:1/3}}
+@media print{header,aside,footer,#toast{display:none!important}#app{display:block;height:auto}#stage{height:auto}svg#svg{height:auto}}
+</style></head><body>
+<div id="app">
+<header>
+  <h1>Krüger festival · plattegrond-planner</h1>
+  <button id="bUndo" title="Ctrl+Z">↶ Ongedaan</button><button id="bRedo" title="Ctrl+Y">↷ Opnieuw</button>
+  <button id="bMeas">📏 Meten</button><button id="bSnap" class="on">Raster 0,5 m</button><button id="bDim" class="on">Maten tonen</button><button id="bFit">Alles tonen</button>
+  <button id="bSave">Opslaan als bestand</button><button id="bOpen">Openen</button><button id="bPng">Afbeelding (PNG)</button><button id="bPrint">Afdrukken</button><button id="bReset" class="danger">Terug naar rechtgezet ontwerp</button>
+  <span id="status" class="ok"></span><input type="file" id="file" accept=".json,application/json" hidden>
+</header>
+<aside id="left"><h2>Toevoegen</h2><div id="pal"></div>
+  <h2>Bediening</h2><div style="color:var(--mut)">Sleep een object om het te verplaatsen. Sleep het blauwe bolletje om te draaien. Scrollen = zoomen, de achtergrond slepen = schuiven.<br><br>R = 15° draaien · Delete = verwijderen · Ctrl+D = kopie · pijltjes = 10 cm schuiven</div></aside>
+<div id="stage"><svg id="svg" xmlns="http://www.w3.org/2000/svg">
+<style>
+.gl{font:1.5px Helvetica,Arial,sans-serif;fill:#8b90a0}.sm{font:1.5px Helvetica,Arial,sans-serif;fill:#3b3f47}.bl{font:600 2.6px Helvetica,Arial,sans-serif;fill:#22252b}.bs{font:1.7px Helvetica,Arial,sans-serif;fill:#4b5563}
+.lab{font-family:Helvetica,Arial,sans-serif;font-weight:700;paint-order:stroke;stroke-linejoin:round;pointer-events:none}
+</style>
+<defs><marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#22252b"/></marker>
+<pattern id="hz" width="1.6" height="1.6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="1.6" stroke="#a16207" stroke-width="0.25" opacity=".55"/></pattern>
+<pattern id="hv" width="1.2" height="1.2" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)"><line x1="0" y1="0" x2="0" y2="1.2" stroke="#6d28d9" stroke-width="0.22" opacity=".6"/></pattern></defs>
+<g id="base"><rect x="0" y="0" width="273.63" height="152.80" fill="#f5f3ee"/>
+<line x1="0" y1="0" x2="0" y2="152.8" stroke="#c9c5bb" stroke-width="0.12"/>
+<line x1="10" y1="0" x2="10" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="20" y1="0" x2="20" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="30" y1="0" x2="30" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="40" y1="0" x2="40" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="50" y1="0" x2="50" y2="152.8" stroke="#c9c5bb" stroke-width="0.12"/>
+<line x1="60" y1="0" x2="60" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="70" y1="0" x2="70" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="80" y1="0" x2="80" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="90" y1="0" x2="90" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="100" y1="0" x2="100" y2="152.8" stroke="#c9c5bb" stroke-width="0.12"/>
+<line x1="110" y1="0" x2="110" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="120" y1="0" x2="120" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="130" y1="0" x2="130" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="140" y1="0" x2="140" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="150" y1="0" x2="150" y2="152.8" stroke="#c9c5bb" stroke-width="0.12"/>
+<line x1="160" y1="0" x2="160" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="170" y1="0" x2="170" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="180" y1="0" x2="180" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="190" y1="0" x2="190" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="200" y1="0" x2="200" y2="152.8" stroke="#c9c5bb" stroke-width="0.12"/>
+<line x1="210" y1="0" x2="210" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="220" y1="0" x2="220" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="230" y1="0" x2="230" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="240" y1="0" x2="240" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="250" y1="0" x2="250" y2="152.8" stroke="#c9c5bb" stroke-width="0.12"/>
+<line x1="260" y1="0" x2="260" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="270" y1="0" x2="270" y2="152.8" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="0" y1="0" x2="273.6" y2="0" stroke="#c9c5bb" stroke-width="0.12"/>
+<line x1="0" y1="10" x2="273.6" y2="10" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="0" y1="20" x2="273.6" y2="20" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="0" y1="30" x2="273.6" y2="30" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="0" y1="40" x2="273.6" y2="40" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="0" y1="50" x2="273.6" y2="50" stroke="#c9c5bb" stroke-width="0.12"/>
+<line x1="0" y1="60" x2="273.6" y2="60" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="0" y1="70" x2="273.6" y2="70" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="0" y1="80" x2="273.6" y2="80" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="0" y1="90" x2="273.6" y2="90" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="0" y1="100" x2="273.6" y2="100" stroke="#c9c5bb" stroke-width="0.12"/>
+<line x1="0" y1="110" x2="273.6" y2="110" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="0" y1="120" x2="273.6" y2="120" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="0" y1="130" x2="273.6" y2="130" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="0" y1="140" x2="273.6" y2="140" stroke="#e2dfd7" stroke-width="0.06"/>
+<line x1="0" y1="150" x2="273.6" y2="150" stroke="#c9c5bb" stroke-width="0.12"/>
+<text x="0.4" y="2.2" class="gl">0</text>
+<text x="20.4" y="2.2" class="gl">20</text>
+<text x="40.4" y="2.2" class="gl">40</text>
+<text x="60.4" y="2.2" class="gl">60</text>
+<text x="80.4" y="2.2" class="gl">80</text>
+<text x="100.4" y="2.2" class="gl">100</text>
+<text x="120.4" y="2.2" class="gl">120</text>
+<text x="140.4" y="2.2" class="gl">140</text>
+<text x="160.4" y="2.2" class="gl">160</text>
+<text x="180.4" y="2.2" class="gl">180</text>
+<text x="200.4" y="2.2" class="gl">200</text>
+<text x="220.4" y="2.2" class="gl">220</text>
+<text x="240.4" y="2.2" class="gl">240</text>
+<text x="260.4" y="2.2" class="gl">260</text>
+<text x="0.5" y="19.6" class="gl">20</text>
+<text x="0.5" y="39.6" class="gl">40</text>
+<text x="0.5" y="59.6" class="gl">60</text>
+<text x="0.5" y="79.6" class="gl">80</text>
+<text x="0.5" y="99.6" class="gl">100</text>
+<text x="0.5" y="119.6" class="gl">120</text>
+<text x="0.5" y="139.6" class="gl">140</text>
+<polygon points="11.26,5.04 123.99,5.04 123.99,20.42 122.47,20.80 124.35,36.66 67.91,35.91 11.26,36.47" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="12.37,36.17 66.12,36.17 65.33,45.73 12.32,38.64" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="37.48,47.52 58.94,49.99 54.96,88.25 33.03,87.11" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="123.61,20.10 160.78,25.08 158.72,44.65 154.10,71.31 116.16,64.39" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="160.68,25.28 198.23,30.39 194.18,51.10 158.55,44.74" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="173.61,46.88 194.15,50.80 189.36,74.22 168.82,70.49" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="198.16,31.28 218.16,33.66 214.36,54.14 193.88,51.29" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="193.62,51.28 215.38,54.18 214.06,76.88 189.39,74.47" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="214.06,54.13 235.45,58.96 232.13,80.59 213.64,77.47" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="206.63,77.32 232.42,80.67 231.18,91.27 204.81,89.36" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="38.36,109.50 106.50,110.42 124.53,112.88 120.34,148.81 37.89,148.29" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="122.79,113.30 173.41,115.51 170.33,149.87 119.71,149.87" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="180.00,133.33 230.77,134.36 229.23,152.82 179.49,152.82" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="260.51,61.54 272.82,61.54 268.72,145.64 257.44,145.64" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="2.05,37.95 10.26,37.95 10.26,88.20 2.05,88.20" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="3.08,99.49 21.54,99.49 20.51,146.67 1.03,146.67" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="154.36,65.95 163.59,67.28 162.77,72.62 153.64,71.38" fill="none" stroke="#3b82a6" stroke-width="0.15" stroke-dasharray="0.6 0.4"/>
+<polygon points="171.40,81.02 174.01,78.62 175.80,80.62 173.21,83.02" fill="#c9b29f" stroke="#22252b" stroke-width="0.12"/>
+<polygon points="220.90,99.22 223.21,99.22 223.21,103.24 220.90,103.24" fill="#c9b29f" stroke="#22252b" stroke-width="0.12"/>
+<polygon points="63.18,46.15 64.51,46.15 64.51,47.38 63.18,47.38" fill="#c9b29f" stroke="#22252b" stroke-width="0.12"/>
+<polygon points="177.44,97.74 179.49,97.74 179.49,100.51 177.44,100.51" fill="#c9b29f" stroke="#22252b" stroke-width="0.12"/>
+<polygon points="190.15,91.59 191.69,91.59 191.59,95.18 190.05,95.18" fill="#c9b29f" stroke="#22252b" stroke-width="0.12"/>
+<polygon points="223.21,144.11 210.36,144.18 209.69,144.19 207.62,144.20 208.15,139.73 208.95,132.89 182.48,131.44 183.28,116.11 226.46,118.32" fill="#dcd8cf" stroke="#22252b" stroke-width="0.18"/>
+<circle cx="182.31" cy="86.43" r="7.40" fill="#d8b9ae" stroke="#22252b" stroke-width="0.18"/>
+<polygon points="192.01,92.03 190.23,94.35 187.91,96.13 185.21,97.24 182.31,97.62 179.41,97.24 176.71,96.13 174.39,94.35 172.61,92.03 171.50,89.33 171.12,86.43 171.50,83.53 172.61,80.83 176.17,82.13 175.26,83.86 174.84,85.78 174.92,87.73 175.51,89.60 176.56,91.25 178.01,92.57 179.74,93.48 181.66,93.90 183.61,93.82 185.48,93.23 187.13,92.18 188.45,90.73" fill="#e7d3ca" stroke="#8d6e63" stroke-width="0.1" stroke-dasharray="0.5 0.4"/>
+<line x1="63.71" y1="50.14" x2="117.86" y2="60.41" stroke="#8a8f98" stroke-width="0.7"/>
+<rect x="63.41" y="49.84" width="0.6" height="0.6" fill="#22252b"/>
+<rect x="72.44" y="51.55" width="0.6" height="0.6" fill="#22252b"/>
+<rect x="81.46" y="53.26" width="0.6" height="0.6" fill="#22252b"/>
+<rect x="90.48" y="54.98" width="0.6" height="0.6" fill="#22252b"/>
+<rect x="99.51" y="56.69" width="0.6" height="0.6" fill="#22252b"/>
+<rect x="108.54" y="58.40" width="0.6" height="0.6" fill="#22252b"/>
+<rect x="117.56" y="60.11" width="0.6" height="0.6" fill="#22252b"/>
+<line x1="39.38" y1="86.77" x2="39.38" y2="109.95" stroke="#8a8f98" stroke-width="0.7"/>
+<rect x="39.08" y="94.35" width="0.6" height="0.6" fill="#22252b"/>
+<rect x="39.08" y="102.58" width="0.6" height="0.6" fill="#22252b"/>
+<rect x="39.08" y="109.07" width="0.6" height="0.6" fill="#22252b"/>
+<polygon points="36.92,107.69 102.56,111.18 171.79,114.26 172.10,116.82 102.56,113.74 34.36,110.26" fill="none" stroke="#3b82a6" stroke-width="0.15" stroke-dasharray="0.6 0.4"/>
+<polyline points="28.21,42.05 24.10,87.18" fill="none" stroke="#7a4c3c" stroke-width="0.4"/>
+<polyline points="25.13,97.44 22.05,146.67" fill="none" stroke="#7a4c3c" stroke-width="0.4"/>
+<polyline points="66.15,35.38 66.15,45.95" fill="none" stroke="#7a4c3c" stroke-width="0.4"/>
+<polyline points="29.74,86.87 34.87,87.08" fill="none" stroke="#7a4c3c" stroke-width="0.4"/>
+<polygon points="56.72,93.33 61.23,93.33 61.23,96.10 56.72,96.10" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="68.51,93.95 78.36,93.95 78.36,96.62 68.51,96.62" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="85.13,94.77 94.56,94.77 94.56,97.44 85.13,97.44" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="102.05,95.38 111.08,95.38 111.08,98.46 102.05,98.46" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="118.97,96.62 127.69,96.62 127.69,99.08 118.97,99.08" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="134.87,98.05 144.92,98.05 144.92,100.51 134.87,100.51" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="151.38,99.49 156.41,99.49 156.41,101.13 151.38,101.13" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="189.03,80.51 191.79,80.51 191.79,86.15 189.03,86.15" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="206.15,90.67 219.49,90.67 219.49,91.90 206.15,91.90" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="169.85,92.82 171.49,92.82 171.49,95.90 169.85,95.90" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="171.69,96.00 174.36,96.00 174.36,98.05 171.69,98.05" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="174.56,98.05 177.44,98.05 177.44,99.49 174.56,99.49" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="224.41,104.20 232.41,104.20 232.41,105.44 224.41,105.44" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="61.19,62.27 64.81,62.99 64.51,64.50 60.89,63.77" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="78.49,64.03 82.11,64.76 81.80,66.27 78.18,65.54" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="90.72,66.48 94.34,67.20 94.04,68.72 90.42,67.99" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="95.61,67.95 99.23,68.68 98.93,70.18 95.31,69.46" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="106.38,69.42 110.00,70.14 109.69,71.65 106.07,70.92" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="111.26,69.42 114.89,70.14 114.58,71.65 110.96,70.92" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="122.65,73.29 126.27,74.01 125.96,75.53 122.34,74.80" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="128.02,73.78 131.64,74.50 131.34,76.01 127.72,75.29" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<polygon points="142.70,77.69 146.32,78.42 146.02,79.93 142.40,79.20" fill="#9db56a" stroke="#5b6e2e" stroke-width="0.1"/>
+<circle cx="62.85" cy="63.38" r="3.38" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="62.85" cy="63.38" r="0.32" fill="#3f6b1f"/>
+<circle cx="80.15" cy="65.15" r="3.90" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="80.15" cy="65.15" r="0.32" fill="#3f6b1f"/>
+<circle cx="92.38" cy="67.60" r="3.38" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="92.38" cy="67.60" r="0.32" fill="#3f6b1f"/>
+<circle cx="97.27" cy="69.06" r="2.67" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="97.27" cy="69.06" r="0.32" fill="#3f6b1f"/>
+<circle cx="108.03" cy="70.53" r="3.08" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="108.03" cy="70.53" r="0.32" fill="#3f6b1f"/>
+<circle cx="112.93" cy="70.53" r="2.67" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="112.93" cy="70.53" r="0.32" fill="#3f6b1f"/>
+<circle cx="124.30" cy="74.41" r="2.67" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="124.30" cy="74.41" r="0.32" fill="#3f6b1f"/>
+<circle cx="129.68" cy="74.90" r="2.67" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="129.68" cy="74.90" r="0.32" fill="#3f6b1f"/>
+<circle cx="144.36" cy="78.81" r="3.28" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="144.36" cy="78.81" r="0.32" fill="#3f6b1f"/>
+<circle cx="225.57" cy="104.74" r="2.87" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="225.57" cy="104.74" r="0.32" fill="#3f6b1f"/>
+<circle cx="73.33" cy="96.00" r="1.85" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="73.33" cy="96.00" r="0.32" fill="#3f6b1f"/>
+<circle cx="85.33" cy="96.72" r="1.85" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="85.33" cy="96.72" r="0.32" fill="#3f6b1f"/>
+<circle cx="92.51" cy="96.72" r="1.85" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="92.51" cy="96.72" r="0.32" fill="#3f6b1f"/>
+<circle cx="103.79" cy="97.44" r="1.85" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="103.79" cy="97.44" r="0.32" fill="#3f6b1f"/>
+<circle cx="109.03" cy="97.64" r="1.85" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="109.03" cy="97.64" r="0.32" fill="#3f6b1f"/>
+<circle cx="120.72" cy="98.15" r="1.85" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="120.72" cy="98.15" r="0.32" fill="#3f6b1f"/>
+<circle cx="125.13" cy="98.67" r="1.85" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="125.13" cy="98.67" r="0.32" fill="#3f6b1f"/>
+<circle cx="136.20" cy="99.28" r="1.85" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="136.20" cy="99.28" r="0.32" fill="#3f6b1f"/>
+<circle cx="153.44" cy="100.31" r="1.85" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="153.44" cy="100.31" r="0.32" fill="#3f6b1f"/>
+<circle cx="27.18" cy="115.90" r="1.85" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="27.18" cy="115.90" r="0.32" fill="#3f6b1f"/>
+<circle cx="27.18" cy="121.44" r="1.85" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="27.18" cy="121.44" r="0.32" fill="#3f6b1f"/>
+<circle cx="27.18" cy="126.97" r="1.85" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="27.18" cy="126.97" r="0.32" fill="#3f6b1f"/>
+<circle cx="27.18" cy="132.51" r="1.85" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="27.18" cy="132.51" r="0.32" fill="#3f6b1f"/>
+<circle cx="27.18" cy="138.05" r="1.85" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="27.18" cy="138.05" r="0.32" fill="#3f6b1f"/>
+<circle cx="27.18" cy="143.59" r="1.85" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="27.18" cy="143.59" r="0.32" fill="#3f6b1f"/>
+<circle cx="78.97" cy="37.54" r="1.00" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="78.97" cy="37.54" r="0.32" fill="#3f6b1f"/>
+<circle cx="83.08" cy="37.54" r="1.00" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="83.08" cy="37.54" r="0.32" fill="#3f6b1f"/>
+<circle cx="94.36" cy="37.54" r="1.00" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="94.36" cy="37.54" r="0.32" fill="#3f6b1f"/>
+<circle cx="106.67" cy="37.95" r="1.00" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="106.67" cy="37.95" r="0.32" fill="#3f6b1f"/>
+<circle cx="110.77" cy="37.95" r="1.00" fill="#7fae4c" fill-opacity="0.26" stroke="#3f6b1f" stroke-width="0.1"/><circle cx="110.77" cy="37.95" r="0.32" fill="#3f6b1f"/>
+<line x1="71.38" y1="93.40" x2="71.38" y2="94.30" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="72.57" y1="93.40" x2="72.57" y2="94.30" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="73.76" y1="93.40" x2="73.76" y2="94.30" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="74.95" y1="93.40" x2="74.95" y2="94.30" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="76.14" y1="93.40" x2="76.14" y2="94.30" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="77.33" y1="93.40" x2="77.33" y2="94.30" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="86.15" y1="94.01" x2="86.15" y2="94.91" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="87.18" y1="94.01" x2="87.18" y2="94.91" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="88.21" y1="94.01" x2="88.21" y2="94.91" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="89.23" y1="94.01" x2="89.23" y2="94.91" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="90.26" y1="94.01" x2="90.26" y2="94.91" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="105.04" y1="94.73" x2="105.02" y2="95.63" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="106.27" y1="94.76" x2="106.25" y2="95.66" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="107.50" y1="94.80" x2="107.48" y2="95.70" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="108.73" y1="94.83" x2="108.71" y2="95.73" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="61.84" y1="48.07" x2="61.64" y2="48.95" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="62.76" y1="48.28" x2="62.57" y2="49.15" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="63.69" y1="48.48" x2="63.49" y2="49.36" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="46.68" y1="87.75" x2="46.66" y2="88.65" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="48.02" y1="87.79" x2="47.99" y2="88.69" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="49.35" y1="87.83" x2="49.32" y2="88.73" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="50.68" y1="87.88" x2="50.65" y2="88.78" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="52.01" y1="87.92" x2="51.98" y2="88.82" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="53.34" y1="87.96" x2="53.32" y2="88.86" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="237.94" y1="93.84" x2="237.04" y2="93.86" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="237.96" y1="94.68" x2="237.06" y2="94.70" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="237.97" y1="95.51" x2="237.07" y2="95.53" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="237.99" y1="96.35" x2="237.09" y2="96.37" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="238.01" y1="97.19" x2="237.11" y2="97.21" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="238.02" y1="98.02" x2="237.12" y2="98.04" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="238.04" y1="98.86" x2="237.14" y2="98.88" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="168.96" y1="70.01" x2="168.06" y2="69.89" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="168.80" y1="71.24" x2="167.91" y2="71.12" stroke="#1d4ed8" stroke-width="0.16"/>
+<line x1="168.65" y1="72.47" x2="167.75" y2="72.35" stroke="#1d4ed8" stroke-width="0.16"/>
+<polyline points="154.15,73.44 155.90,73.69" fill="none" stroke="#6b7280" stroke-width="0.2"/>
+<polyline points="156.51,73.79 158.26,74.05" fill="none" stroke="#6b7280" stroke-width="0.2"/>
+<polyline points="158.87,74.15 160.61,74.41" fill="none" stroke="#6b7280" stroke-width="0.2"/>
+<polyline points="38.26,88.00 38.26,92.31" fill="none" stroke="#6b7280" stroke-width="0.2"/>
+<polyline points="179.69,100.72 182.15,101.13" fill="none" stroke="#6b7280" stroke-width="0.2"/>
+<circle cx="27.18" cy="97.44" r="0.34" fill="white" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="28.10" cy="98.46" r="0.34" fill="white" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="29.03" cy="99.49" r="0.34" fill="white" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="238.97" cy="82.56" r="0.34" fill="white" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="238.97" cy="85.64" r="0.34" fill="white" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="238.56" cy="88.72" r="0.34" fill="white" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="206.72" cy="115.61" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="210.31" cy="115.85" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="213.69" cy="116.06" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="217.13" cy="116.28" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="220.51" cy="116.50" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="222.15" cy="105.38" r="0.34" fill="white" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="227.18" cy="105.64" r="0.34" fill="white" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="59.80" cy="51.49" r="0.34" fill="white" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="59.69" cy="52.67" r="0.34" fill="white" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="59.57" cy="53.85" r="0.34" fill="white" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="120.08" cy="67.52" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="121.47" cy="67.76" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="122.85" cy="68.02" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="124.24" cy="68.27" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="125.62" cy="68.52" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="126.99" cy="68.77" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="128.38" cy="69.03" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="129.76" cy="69.28" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="131.15" cy="69.53" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="132.52" cy="69.78" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="133.91" cy="70.03" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="135.29" cy="70.29" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="136.68" cy="70.53" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="138.06" cy="70.79" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="139.44" cy="71.04" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="140.82" cy="71.29" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="142.20" cy="71.54" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="143.59" cy="71.79" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="144.96" cy="72.04" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="146.35" cy="72.30" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="147.73" cy="72.55" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<circle cx="149.12" cy="72.80" r="0.34" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<rect x="67.70" y="94.27" width="0.80" height="0.80" fill="#7c3aed" stroke="#22252b" stroke-width="0.08"/>
+<rect x="221.75" y="104.16" width="0.80" height="0.80" fill="#7c3aed" stroke="#22252b" stroke-width="0.08"/>
+<rect x="56.20" y="91.37" width="0.84" height="0.84" fill="#9ca3af" stroke="#22252b" stroke-width="0.08"/>
+<rect x="46.25" y="108.61" width="0.84" height="0.84" fill="#9ca3af" stroke="#22252b" stroke-width="0.08"/>
+<rect x="54.25" y="108.71" width="0.84" height="0.84" fill="#9ca3af" stroke="#22252b" stroke-width="0.08"/>
+<rect x="202.83" y="89.71" width="1.10" height="1.10" fill="#b45f6b" stroke="#22252b" stroke-width="0.08"/>
+<rect x="202.83" y="90.94" width="1.10" height="1.10" fill="#b45f6b" stroke="#22252b" stroke-width="0.08"/>
+<rect x="203.14" y="100.58" width="1.10" height="1.10" fill="#b45f6b" stroke="#22252b" stroke-width="0.08"/>
+<rect x="226.42" y="116.52" width="0.60" height="0.60" fill="#e2571c" stroke="#22252b" stroke-width="0.08"/>
+<rect x="187.80" y="100.52" width="0.60" height="0.60" fill="#d1d5db" stroke="#22252b" stroke-width="0.08"/>
+<circle cx="173.85" cy="113.64" r="0.36" fill="white" stroke="#c8102e" stroke-width="0.2"/>
+<circle cx="174.15" cy="116.87" r="0.36" fill="white" stroke="#c8102e" stroke-width="0.2"/>
+<polygon points="233.03,105.76 233.48,106.61 232.58,106.61" fill="#2b6cb0"/>
+<polygon points="224.82,116.32 225.27,117.17 224.37,117.17" fill="#2b6cb0"/>
+<polygon points="238.46,124.94 238.91,125.79 238.01,125.79" fill="#2b6cb0"/>
+<polygon points="264.10,118.78 264.55,119.63 263.65,119.63" fill="#2b6cb0"/>
+<polygon points="246.15,112.83 246.60,113.68 245.70,113.68" fill="#2b6cb0"/>
+<polygon points="144.82,98.99 145.27,99.84 144.37,99.84" fill="#2b6cb0"/>
+<polygon points="25.85,88.22 26.30,89.07 25.40,89.07" fill="#2b6cb0"/>
+<polygon points="61.85,94.37 62.30,95.22 61.40,95.22" fill="#2b6cb0"/>
+<polygon points="122.36,95.19 122.81,96.04 121.91,96.04" fill="#2b6cb0"/>
+<polygon points="29.95,100.01 30.40,100.86 29.50,100.86" fill="#2b6cb0"/>
+<polygon points="157.13,100.01 157.58,100.86 156.68,100.86" fill="#2b6cb0"/>
+<circle cx="92.72" cy="76.51" r="1.10" fill="#f59e0b" stroke="#22252b" stroke-width="0.12"/><path d="M91.62 76.51 h2.20 M92.72 75.41 v2.20" stroke="#22252b" stroke-width="0.12"/>
+<text x="94.22" y="75.21" class="sm">lichtmast 15,5 m</text>
+<circle cx="142.15" cy="85.23" r="1.10" fill="#f59e0b" stroke="#22252b" stroke-width="0.12"/><path d="M141.05 85.23 h2.20 M142.15 84.13 v2.20" stroke="#22252b" stroke-width="0.12"/>
+<text x="143.65" y="83.93" class="sm">lichtmast 15,5 m</text>
+<circle cx="253.95" cy="90.26" r="0.60" fill="#f59e0b" stroke="#22252b" stroke-width="0.12"/><path d="M253.35 90.26 h1.20 M253.95 89.66 v1.20" stroke="#22252b" stroke-width="0.12"/>
+<circle cx="251.59" cy="96.72" r="0.60" fill="#f59e0b" stroke="#22252b" stroke-width="0.12"/><path d="M250.99 96.72 h1.20 M251.59 96.12 v1.20" stroke="#22252b" stroke-width="0.12"/>
+<circle cx="235.69" cy="93.13" r="0.60" fill="#f59e0b" stroke="#22252b" stroke-width="0.12"/><path d="M235.09 93.13 h1.20 M235.69 92.53 v1.20" stroke="#22252b" stroke-width="0.12"/>
+<polygon points="226.78,98.18 230.02,98.75 229.84,99.76 226.60,99.19" fill="#22252b"/><text x="228.31" y="97.37" class="sm" text-anchor="middle">totem</text>
+<text x="83.60" y="22.91" class="bl" text-anchor="middle">Hal</text><text x="83.60" y="25.51" class="bs" text-anchor="middle">hoogte ca. 9,5 m</text>
+<text x="46.10" y="68.22" class="bl" text-anchor="middle">Bon'Ap</text><text x="46.10" y="70.82" class="bs" text-anchor="middle">hoogte 8,8 m</text>
+<text x="142.67" y="45.11" class="bl" text-anchor="middle">Lidl</text><text x="142.67" y="47.71" class="bs" text-anchor="middle">hoogte 6,4 m</text>
+<text x="181.49" y="60.60" class="bl" text-anchor="middle">Eldi</text><text x="181.49" y="63.20" class="bs" text-anchor="middle">hoogte 5,5 m</text>
+<text x="85.52" y="125.98" class="bl" text-anchor="middle">HEMA · C&A · Torfs · ZEB</text><text x="85.52" y="128.58" class="bs" text-anchor="middle">hoogte 10,6 m</text>
+<text x="146.56" y="132.14" class="bl" text-anchor="middle">Lola Liza</text><text x="146.56" y="134.74" class="bs" text-anchor="middle">hoogte 7,8 m</text>
+<text x="222.06" y="101.73" class="sm" text-anchor="middle" font-weight="700">WC</text>
+<text x="206.69" y="135.02" class="bl" text-anchor="middle">Appartementen</text><text x="206.69" y="137.62" class="bs" text-anchor="middle">hoogte ca. 13,0 m</text>
+<text x="182.31" y="86.43" class="bl" text-anchor="middle">De Krüger</text><text x="182.31" y="89.03" class="bs" text-anchor="middle">hoogte 8,6 m</text>
+<text class="sm" text-anchor="middle" transform="translate(88.78 54.07) rotate(11)">witte balk op kolommen · onderdoorgang ca. 4,5 m</text>
+<circle cx="262.6" cy="12.0" r="8" fill="white" fill-opacity=".9" stroke="#22252b" stroke-width="0.12"/><line x1="257.34" y1="13.50" x2="266.96" y2="10.77" stroke="#22252b" stroke-width="0.35" marker-end="url(#arr)"/><text x="264.52" y="8.98" class="bl">N</text>
+<rect x="207.6" y="142.3" width="58" height="8.5" fill="white" fill-opacity=".92" stroke="#22252b" stroke-width="0.1"/>
+<rect x="211.6" y="147.8" width="10" height="1" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<rect x="221.6" y="147.8" width="10" height="1" fill="white" stroke="#22252b" stroke-width="0.1"/>
+<rect x="231.6" y="147.8" width="10" height="1" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<rect x="241.6" y="147.8" width="10" height="1" fill="white" stroke="#22252b" stroke-width="0.1"/>
+<rect x="251.6" y="147.8" width="10" height="1" fill="#22252b" stroke="#22252b" stroke-width="0.1"/>
+<text x="211.6" y="147.0" class="sm" text-anchor="middle">0</text>
+<text x="221.6" y="147.0" class="sm" text-anchor="middle">10</text>
+<text x="231.6" y="147.0" class="sm" text-anchor="middle">20</text>
+<text x="241.6" y="147.0" class="sm" text-anchor="middle">30</text>
+<text x="251.6" y="147.0" class="sm" text-anchor="middle">40</text>
+<text x="261.6" y="147.0" class="sm" text-anchor="middle">50</text>
+<text x="262.8" y="148.8" class="sm">m</text></g><g id="objs"></g><g id="labs"></g><g id="ovl"></g>
+</svg><div id="toast"></div></div>
+<aside id="right"><h2>Geselecteerd</h2><div id="props"><div id="none">Klik op een object op de plattegrond.</div></div>
+  <h2>Meldingen</h2><div id="msgs"></div></aside>
+<footer><span id="pos">positie –</span><span>De meters zijn dezelfde als in het 3D-wandelmodel.</span><span id="saved"></span></footer>
+</div>
+<script>
+const D={"size":[273.63,152.8],"obst":[{"t":"p","p":[[11.26,5.04],[123.99,5.04],[123.99,20.42],[122.47,20.8],[124.35,36.66],[67.91,35.91],[11.26,36.47]],"n":"Hal"},{"t":"p","p":[[12.37,36.17],[66.12,36.17],[65.33,45.73],[12.32,38.64]],"n":"Lage aanbouw hal"},{"t":"p","p":[[37.48,47.52],[58.94,49.99],[54.96,88.25],[33.03,87.11]],"n":"Bon'Ap-gebouw"},{"t":"p","p":[[123.61,20.1],[160.78,25.08],[158.72,44.65],[154.1,71.31],[116.16,64.39]],"n":"Lidl"},{"t":"p","p":[[160.68,25.28],[198.23,30.39],[194.18,51.1],[158.55,44.74]],"n":"Lidl achterbouw"},{"t":"p","p":[[173.61,46.88],[194.15,50.8],[189.36,74.22],[168.82,70.49]],"n":"Eldi"},{"t":"p","p":[[198.16,31.28],[218.16,33.66],[214.36,54.14],[193.88,51.29]],"n":"Gebouw achter Lidl"},{"t":"p","p":[[193.62,51.28],[215.38,54.18],[214.06,76.88],[189.39,74.47]],"n":"Gebouw achter Eldi"},{"t":"p","p":[[214.06,54.13],[235.45,58.96],[232.13,80.59],[213.64,77.47]],"n":"Straatgebouw"},{"t":"p","p":[[206.63,77.32],[232.42,80.67],[231.18,91.27],[204.81,89.36]],"n":"Gebouw bij totem"},{"t":"p","p":[[38.36,109.5],[106.5,110.42],[124.53,112.88],[120.34,148.81],[37.89,148.29]],"n":"Winkelstrip HEMA / C&A (hoog zwart volume)"},{"t":"p","p":[[122.79,113.3],[173.41,115.51],[170.33,149.87],[119.71,149.87]],"n":"Winkelstrip HEMA / Lola Liza"},{"t":"p","p":[[180.0,133.33],[230.77,134.36],[229.23,152.82],[179.49,152.82]],"n":"Achterbouw appartementen"},{"t":"p","p":[[260.51,61.54],[272.82,61.54],[268.72,145.64],[257.44,145.64]],"n":"Bebouwing overkant straat"},{"t":"p","p":[[2.05,37.95],[10.26,37.95],[10.26,88.2],[2.05,88.2]],"n":"Rijwoningen"},{"t":"p","p":[[3.08,99.49],[21.54,99.49],[20.51,146.67],[1.03,146.67]],"n":"Woningen"},{"t":"p","p":[[154.36,65.95],[163.59,67.28],[162.77,72.62],[153.64,71.38]],"n":"winkelkarrenstalling van de Lidl"},{"t":"p","p":[[171.4,81.02],[174.01,78.62],[175.8,80.62],[173.21,83.02]],"n":"Bijgebouw De Krüger"},{"t":"p","p":[[220.9,99.22],[223.21,99.22],[223.21,103.24],[220.9,103.24]],"n":"WC-gebouwtje (ingang)"},{"t":"p","p":[[63.18,46.15],[64.51,46.15],[64.51,47.38],[63.18,47.38]],"n":"Groene container (bij Bon'Ap)"},{"t":"p","p":[[177.44,97.74],[179.49,97.74],[179.49,100.51],[177.44,100.51]],"n":"Bakstenen muur KRUGER"},{"t":"p","p":[[190.15,91.59],[191.69,91.59],[191.59,95.18],[190.05,95.18]],"n":"Blauw afgedekt object"},{"t":"p","p":[[223.21,144.11],[210.36,144.18],[209.69,144.19],[207.62,144.2],[208.15,139.73],[208.95,132.89],[182.48,131.44],[183.28,116.11],[226.46,118.32]],"n":"Appartementen"},{"t":"c","x":182.31,"y":86.43,"r":7.4,"n":"De Krüger (rond gebouw)"},{"t":"p","p":[[192.01,92.03],[190.23,94.35],[187.91,96.13],[185.21,97.24],[182.31,97.62],[179.41,97.24],[176.71,96.13],[174.39,94.35],[172.61,92.03],[171.5,89.33],[171.12,86.43],[171.5,83.53],[172.61,80.83],[176.17,82.13],[175.26,83.86],[174.84,85.78],[174.92,87.73],[175.51,89.6],[176.56,91.25],[178.01,92.57],[179.74,93.48],[181.66,93.9],[183.61,93.82],[185.48,93.23],[187.13,92.18],[188.45,90.73]],"n":"terras van De Krüger"},{"t":"c","x":63.71,"y":50.14,"r":0.42,"n":"kolom van de witte balk"},{"t":"c","x":72.73,"y":51.85,"r":0.42,"n":"kolom van de witte balk"},{"t":"c","x":81.76,"y":53.56,"r":0.42,"n":"kolom van de witte balk"},{"t":"c","x":90.78,"y":55.27,"r":0.42,"n":"kolom van de witte balk"},{"t":"c","x":99.81,"y":56.99,"r":0.42,"n":"kolom van de witte balk"},{"t":"c","x":108.84,"y":58.7,"r":0.42,"n":"kolom van de witte balk"},{"t":"c","x":117.86,"y":60.41,"r":0.42,"n":"kolom van de witte balk"},{"t":"c","x":39.38,"y":94.65,"r":0.42,"n":"kolom van het groene portaal"},{"t":"c","x":39.38,"y":102.88,"r":0.42,"n":"kolom van het groene portaal"},{"t":"c","x":39.38,"y":109.37,"r":0.42,"n":"kolom van het groene portaal"},{"t":"p","p":[[28.01,42.03],[23.9,87.16],[24.3,87.2],[28.41,42.07]],"n":"muur of poort"},{"t":"p","p":[[24.93,97.43],[21.85,146.66],[22.25,146.68],[25.33,97.45]],"n":"muur of poort"},{"t":"p","p":[[65.95,35.38],[65.95,45.95],[66.35,45.95],[66.35,35.38]],"n":"muur of poort"},{"t":"p","p":[[29.73,87.07],[34.86,87.28],[34.88,86.88],[29.75,86.67]],"n":"muur of poort"},{"t":"p","p":[[56.72,93.33],[61.23,93.33],[61.23,96.1],[56.72,96.1]],"n":"haag of plantvak"},{"t":"p","p":[[68.51,93.95],[78.36,93.95],[78.36,96.62],[68.51,96.62]],"n":"haag of plantvak"},{"t":"p","p":[[85.13,94.77],[94.56,94.77],[94.56,97.44],[85.13,97.44]],"n":"haag of plantvak"},{"t":"p","p":[[102.05,95.38],[111.08,95.38],[111.08,98.46],[102.05,98.46]],"n":"haag of plantvak"},{"t":"p","p":[[118.97,96.62],[127.69,96.62],[127.69,99.08],[118.97,99.08]],"n":"haag of plantvak"},{"t":"p","p":[[134.87,98.05],[144.92,98.05],[144.92,100.51],[134.87,100.51]],"n":"haag of plantvak"},{"t":"p","p":[[151.38,99.49],[156.41,99.49],[156.41,101.13],[151.38,101.13]],"n":"haag of plantvak"},{"t":"p","p":[[189.03,80.51],[191.79,80.51],[191.79,86.15],[189.03,86.15]],"n":"haag of plantvak"},{"t":"p","p":[[206.15,90.67],[219.49,90.67],[219.49,91.9],[206.15,91.9]],"n":"haag of plantvak"},{"t":"p","p":[[169.85,92.82],[171.49,92.82],[171.49,95.9],[169.85,95.9]],"n":"haag of plantvak"},{"t":"p","p":[[171.69,96.0],[174.36,96.0],[174.36,98.05],[171.69,98.05]],"n":"haag of plantvak"},{"t":"p","p":[[174.56,98.05],[177.44,98.05],[177.44,99.49],[174.56,99.49]],"n":"haag of plantvak"},{"t":"p","p":[[224.41,104.2],[232.41,104.2],[232.41,105.44],[224.41,105.44]],"n":"haag of plantvak"},{"t":"p","p":[[61.19,62.27],[64.81,62.99],[64.51,64.5],[60.89,63.77]],"n":"haag of plantvak"},{"t":"p","p":[[78.49,64.03],[82.11,64.76],[81.8,66.27],[78.18,65.54]],"n":"haag of plantvak"},{"t":"p","p":[[90.72,66.48],[94.34,67.2],[94.04,68.72],[90.42,67.99]],"n":"haag of plantvak"},{"t":"p","p":[[95.61,67.95],[99.23,68.68],[98.93,70.18],[95.31,69.46]],"n":"haag of plantvak"},{"t":"p","p":[[106.38,69.42],[110.0,70.14],[109.69,71.65],[106.07,70.92]],"n":"haag of plantvak"},{"t":"p","p":[[111.26,69.42],[114.89,70.14],[114.58,71.65],[110.96,70.92]],"n":"haag of plantvak"},{"t":"p","p":[[122.65,73.29],[126.27,74.01],[125.96,75.53],[122.34,74.8]],"n":"haag of plantvak"},{"t":"p","p":[[128.02,73.78],[131.64,74.5],[131.34,76.01],[127.72,75.29]],"n":"haag of plantvak"},{"t":"p","p":[[142.7,77.69],[146.32,78.42],[146.02,79.93],[142.4,79.2]],"n":"haag of plantvak"},{"t":"c","x":62.85,"y":63.38,"r":0.4,"n":"boom"},{"t":"c","x":80.15,"y":65.15,"r":0.4,"n":"boom"},{"t":"c","x":92.38,"y":67.6,"r":0.4,"n":"boom"},{"t":"c","x":97.27,"y":69.06,"r":0.4,"n":"boom"},{"t":"c","x":108.03,"y":70.53,"r":0.4,"n":"boom"},{"t":"c","x":112.93,"y":70.53,"r":0.4,"n":"boom"},{"t":"c","x":124.3,"y":74.41,"r":0.4,"n":"boom"},{"t":"c","x":129.68,"y":74.9,"r":0.4,"n":"boom"},{"t":"c","x":144.36,"y":78.81,"r":0.4,"n":"boom"},{"t":"c","x":225.57,"y":104.74,"r":0.4,"n":"boom"},{"t":"c","x":73.33,"y":96.0,"r":0.4,"n":"boom"},{"t":"c","x":85.33,"y":96.72,"r":0.4,"n":"boom"},{"t":"c","x":92.51,"y":96.72,"r":0.4,"n":"boom"},{"t":"c","x":103.79,"y":97.44,"r":0.4,"n":"boom"},{"t":"c","x":109.03,"y":97.64,"r":0.4,"n":"boom"},{"t":"c","x":120.72,"y":98.15,"r":0.4,"n":"boom"},{"t":"c","x":125.13,"y":98.67,"r":0.4,"n":"boom"},{"t":"c","x":136.2,"y":99.28,"r":0.4,"n":"boom"},{"t":"c","x":153.44,"y":100.31,"r":0.4,"n":"boom"},{"t":"c","x":27.18,"y":115.9,"r":0.4,"n":"boom"},{"t":"c","x":27.18,"y":121.44,"r":0.4,"n":"boom"},{"t":"c","x":27.18,"y":126.97,"r":0.4,"n":"boom"},{"t":"c","x":27.18,"y":132.51,"r":0.4,"n":"boom"},{"t":"c","x":27.18,"y":138.05,"r":0.4,"n":"boom"},{"t":"c","x":27.18,"y":143.59,"r":0.4,"n":"boom"},{"t":"c","x":78.97,"y":37.54,"r":0.4,"n":"struik"},{"t":"c","x":83.08,"y":37.54,"r":0.4,"n":"struik"},{"t":"c","x":94.36,"y":37.54,"r":0.4,"n":"struik"},{"t":"c","x":106.67,"y":37.95,"r":0.4,"n":"struik"},{"t":"c","x":110.77,"y":37.95,"r":0.4,"n":"struik"},{"t":"p","p":[[71.18,94.35],[77.53,94.35],[77.53,93.35],[71.18,93.35]],"n":"fietsenstalling"},{"t":"p","p":[[85.95,94.96],[90.46,94.96],[90.46,93.96],[85.95,93.96]],"n":"fietsenstalling"},{"t":"p","p":[[104.82,95.67],[108.91,95.79],[108.93,94.79],[104.84,94.67]],"n":"fietsenstalling"},{"t":"p","p":[[61.44,48.95],[63.68,49.45],[63.89,48.48],[61.65,47.98]],"n":"fietsenstalling"},{"t":"p","p":[[46.45,88.69],[53.51,88.92],[53.55,87.92],[46.49,87.69]],"n":"fietsenstalling"},{"t":"p","p":[[236.99,93.66],[237.09,99.08],[238.09,99.06],[237.99,93.64]],"n":"fietsenstalling"},{"t":"p","p":[[168.04,69.69],[167.68,72.55],[168.67,72.67],[169.03,69.81]],"n":"fietsenstalling"},{"t":"p","p":[[154.13,73.56],[155.88,73.81],[155.92,73.57],[154.17,73.32]],"n":"leuning"},{"t":"p","p":[[156.49,73.91],[158.24,74.17],[158.28,73.93],[156.53,73.67]],"n":"leuning"},{"t":"p","p":[[158.85,74.27],[160.59,74.53],[160.63,74.29],[158.89,74.03]],"n":"leuning"},{"t":"p","p":[[38.13,88.0],[38.13,92.31],[38.38,92.31],[38.38,88.0]],"n":"leuning"},{"t":"p","p":[[179.67,100.84],[182.13,101.25],[182.17,101.01],[179.71,100.6]],"n":"leuning"},{"t":"c","x":27.18,"y":97.44,"r":0.22,"n":"paaltje (positie geschat)"},{"t":"c","x":28.1,"y":98.46,"r":0.22,"n":"paaltje (positie geschat)"},{"t":"c","x":29.03,"y":99.49,"r":0.22,"n":"paaltje (positie geschat)"},{"t":"c","x":238.97,"y":82.56,"r":0.22,"n":"paaltje (positie geschat)"},{"t":"c","x":238.97,"y":85.64,"r":0.22,"n":"paaltje (positie geschat)"},{"t":"c","x":238.56,"y":88.72,"r":0.22,"n":"paaltje (positie geschat)"},{"t":"c","x":206.72,"y":115.61,"r":0.22,"n":"paaltje"},{"t":"c","x":210.31,"y":115.85,"r":0.22,"n":"paaltje"},{"t":"c","x":213.69,"y":116.06,"r":0.22,"n":"paaltje"},{"t":"c","x":217.13,"y":116.28,"r":0.22,"n":"paaltje"},{"t":"c","x":220.51,"y":116.5,"r":0.22,"n":"paaltje"},{"t":"c","x":222.15,"y":105.38,"r":0.22,"n":"paaltje (positie geschat)"},{"t":"c","x":227.18,"y":105.64,"r":0.22,"n":"paaltje (positie geschat)"},{"t":"c","x":59.8,"y":51.49,"r":0.22,"n":"paaltje (positie geschat)"},{"t":"c","x":59.69,"y":52.67,"r":0.22,"n":"paaltje (positie geschat)"},{"t":"c","x":59.57,"y":53.85,"r":0.22,"n":"paaltje (positie geschat)"},{"t":"c","x":120.08,"y":67.52,"r":0.22,"n":"paaltje"},{"t":"c","x":121.47,"y":67.76,"r":0.22,"n":"paaltje"},{"t":"c","x":122.85,"y":68.02,"r":0.22,"n":"paaltje"},{"t":"c","x":124.24,"y":68.27,"r":0.22,"n":"paaltje"},{"t":"c","x":125.62,"y":68.52,"r":0.22,"n":"paaltje"},{"t":"c","x":126.99,"y":68.77,"r":0.22,"n":"paaltje"},{"t":"c","x":128.38,"y":69.03,"r":0.22,"n":"paaltje"},{"t":"c","x":129.76,"y":69.28,"r":0.22,"n":"paaltje"},{"t":"c","x":131.15,"y":69.53,"r":0.22,"n":"paaltje"},{"t":"c","x":132.52,"y":69.78,"r":0.22,"n":"paaltje"},{"t":"c","x":133.91,"y":70.03,"r":0.22,"n":"paaltje"},{"t":"c","x":135.29,"y":70.29,"r":0.22,"n":"paaltje"},{"t":"c","x":136.68,"y":70.53,"r":0.22,"n":"paaltje"},{"t":"c","x":138.06,"y":70.79,"r":0.22,"n":"paaltje"},{"t":"c","x":139.44,"y":71.04,"r":0.22,"n":"paaltje"},{"t":"c","x":140.82,"y":71.29,"r":0.22,"n":"paaltje"},{"t":"c","x":142.2,"y":71.54,"r":0.22,"n":"paaltje"},{"t":"c","x":143.59,"y":71.79,"r":0.22,"n":"paaltje"},{"t":"c","x":144.96,"y":72.04,"r":0.22,"n":"paaltje"},{"t":"c","x":146.35,"y":72.3,"r":0.22,"n":"paaltje"},{"t":"c","x":147.73,"y":72.55,"r":0.22,"n":"paaltje"},{"t":"c","x":149.12,"y":72.8,"r":0.22,"n":"paaltje"},{"t":"c","x":68.1,"y":94.67,"r":0.4,"n":"parkeerautomaat"},{"t":"c","x":222.15,"y":104.56,"r":0.4,"n":"parkeerautomaat"},{"t":"c","x":56.62,"y":91.79,"r":0.42,"n":"vuilbak"},{"t":"c","x":46.67,"y":109.03,"r":0.42,"n":"vuilbak"},{"t":"c","x":54.67,"y":109.13,"r":0.42,"n":"vuilbak"},{"t":"c","x":203.38,"y":90.26,"r":0.55,"n":"bloembak"},{"t":"c","x":203.38,"y":91.49,"r":0.55,"n":"bloembak"},{"t":"c","x":203.69,"y":101.13,"r":0.55,"n":"bloembak"},{"t":"c","x":226.72,"y":116.82,"r":0.3,"n":"brandkraan"},{"t":"c","x":188.1,"y":100.82,"r":0.3,"n":"betonnen paal"},{"t":"c","x":173.85,"y":113.64,"r":0.2,"n":"wit-rood paaltje"},{"t":"c","x":174.15,"y":116.87,"r":0.2,"n":"wit-rood paaltje"},{"t":"c","x":233.03,"y":106.26,"r":0.18,"n":"verkeersbord"},{"t":"c","x":224.82,"y":116.82,"r":0.18,"n":"verkeersbord"},{"t":"c","x":238.46,"y":125.44,"r":0.18,"n":"verkeersbord"},{"t":"c","x":264.1,"y":119.28,"r":0.18,"n":"verkeersbord"},{"t":"c","x":246.15,"y":113.33,"r":0.18,"n":"verkeersbord"},{"t":"c","x":144.82,"y":99.49,"r":0.18,"n":"verkeersbord"},{"t":"c","x":25.85,"y":88.72,"r":0.18,"n":"verkeersbord"},{"t":"c","x":61.85,"y":94.87,"r":0.18,"n":"verkeersbord"},{"t":"c","x":122.36,"y":95.69,"r":0.18,"n":"verkeersbord"},{"t":"c","x":29.95,"y":100.51,"r":0.18,"n":"verkeersbord"},{"t":"c","x":157.13,"y":100.51,"r":0.18,"n":"verkeersbord"},{"t":"c","x":92.72,"y":76.51,"r":0.45,"n":"lichtmast"},{"t":"c","x":142.15,"y":85.23,"r":0.45,"n":"lichtmast"},{"t":"c","x":253.95,"y":90.26,"r":0.28,"n":"straatlantaarn"},{"t":"c","x":251.59,"y":96.72,"r":0.28,"n":"straatlantaarn"},{"t":"c","x":235.69,"y":93.13,"r":0.28,"n":"straatlantaarn"},{"t":"p","p":[[226.78,98.18],[230.02,98.75],[229.84,99.76],[226.6,99.19]],"n":"totem"}],"over":[{"p":[[63.63,50.58],[117.78,60.85],[117.94,59.97],[63.79,49.7]],"clear":4.5,"n":"de witte balk"},{"p":[[38.93,86.77],[38.93,109.95],[39.83,109.95],[39.83,86.77]],"clear":5.7,"n":"het groene portaal"},{"p":[[36.92,107.69],[102.56,111.18],[171.79,114.26],[172.1,116.82],[102.56,113.74],[34.36,110.26]],"clear":3.2,"n":"de luifel van de winkelstrip"}],"crowns":[{"x":62.85,"y":63.38,"r":3.38},{"x":80.15,"y":65.15,"r":3.9},{"x":92.38,"y":67.6,"r":3.38},{"x":97.27,"y":69.06,"r":2.67},{"x":108.03,"y":70.53,"r":3.08},{"x":112.93,"y":70.53,"r":2.67},{"x":124.3,"y":74.41,"r":2.67},{"x":129.68,"y":74.9,"r":2.67},{"x":144.36,"y":78.81,"r":3.28},{"x":225.57,"y":104.74,"r":2.87},{"x":73.33,"y":96.0,"r":1.85},{"x":85.33,"y":96.72,"r":1.85},{"x":92.51,"y":96.72,"r":1.85},{"x":103.79,"y":97.44,"r":1.85},{"x":109.03,"y":97.64,"r":1.85},{"x":120.72,"y":98.15,"r":1.85},{"x":125.13,"y":98.67,"r":1.85},{"x":136.2,"y":99.28,"r":1.85},{"x":153.44,"y":100.31,"r":1.85},{"x":27.18,"y":115.9,"r":1.85},{"x":27.18,"y":121.44,"r":1.85},{"x":27.18,"y":126.97,"r":1.85},{"x":27.18,"y":132.51,"r":1.85},{"x":27.18,"y":138.05,"r":1.85},{"x":27.18,"y":143.59,"r":1.85}],"objs":[{"id":"t1","type":"zone","name":"Backstage catering VIP + voorraad drank VIP","x":176,"y":133.5,"w":6.5,"h":37,"rot":6},{"id":"t2","type":"zone","name":"Backstage food + dranktent: aanvoer en stock","x":31.4,"y":64,"w":35,"h":5,"rot":95.94},{"id":"t3","type":"zone","name":"Laad- en losplaats artiesten 1","x":182,"y":104.4,"w":37,"h":4,"rot":3.3},{"id":"t4","type":"zone","name":"Laad- en losplaats artiesten 2","x":182,"y":108.9,"w":37,"h":4,"rot":3.3},{"id":"t5","type":"stage","name":"MAINSTAGE","x":161.5,"y":89.0,"w":12,"h":18,"rot":180},{"id":"t6","type":"foh","name":"Regietoren","x":130.5,"y":89.0,"w":4,"h":4,"rot":0},{"id":"t7","type":"vip","name":"VIP-platform (verhoogd, vloer 2,5 m)","x":125,"y":105.5,"w":45,"h":8,"rot":183.8},{"id":"t8","type":"bar","name":"Bar onder VIP","x":124.79,"y":108.59,"w":44,"h":1.6,"rot":183.8},{"id":"t9","type":"trap","name":"Trap VIP","x":104.23,"y":102.92,"w":1.5,"h":4.5,"rot":183.8},{"id":"t10","type":"tent","name":"Bartent","x":61.5,"y":77.5,"w":20,"h":6,"rot":275.94},{"id":"t11","type":"stretch","name":"Stretchtent met picknicktafels","x":81.5,"y":80.0,"w":20,"h":13,"rot":95.94},{"id":"t12","type":"tafel","name":"Picknicktafel","x":84.35,"y":74.87,"w":2.0,"h":1.6,"rot":5.94},{"id":"t13","type":"tafel","name":"Picknicktafel","x":79.77,"y":74.39,"w":2.0,"h":1.6,"rot":5.94},{"id":"t14","type":"tafel","name":"Picknicktafel","x":83.97,"y":78.45,"w":2.0,"h":1.6,"rot":5.94},{"id":"t15","type":"tafel","name":"Picknicktafel","x":79.4,"y":77.97,"w":2.0,"h":1.6,"rot":5.94},{"id":"t16","type":"tafel","name":"Picknicktafel","x":83.6,"y":82.03,"w":2.0,"h":1.6,"rot":5.94},{"id":"t17","type":"tafel","name":"Picknicktafel","x":79.03,"y":81.55,"w":2.0,"h":1.6,"rot":5.94},{"id":"t18","type":"tafel","name":"Picknicktafel","x":83.23,"y":85.61,"w":2.0,"h":1.6,"rot":5.94},{"id":"t19","type":"tafel","name":"Picknicktafel","x":78.65,"y":85.13,"w":2.0,"h":1.6,"rot":5.94},{"id":"t20","type":"food","name":"Food 1","x":75.0,"y":39.3,"w":6.06,"h":2.44,"rot":180},{"id":"t21","type":"food","name":"Food 2","x":88.5,"y":39.3,"w":6.06,"h":2.44,"rot":180},{"id":"t22","type":"food","name":"Food 3","x":100.5,"y":39.3,"w":6.06,"h":2.44,"rot":180},{"id":"t23","type":"food","name":"Food 4","x":117.56,"y":44.5,"w":6.06,"h":2.44,"rot":279.55},{"id":"t24","type":"food","name":"Food 5","x":116.13,"y":53.0,"w":6.06,"h":2.44,"rot":279.55},{"id":"t25","type":"tafel","name":"Picknicktafel","x":79.5,"y":45.2,"w":2.0,"h":1.6,"rot":0},{"id":"t26","type":"tafel","name":"Picknicktafel","x":85.3,"y":45.2,"w":2.0,"h":1.6,"rot":0},{"id":"t27","type":"tafel","name":"Picknicktafel","x":91.1,"y":45.2,"w":2.0,"h":1.6,"rot":0},{"id":"t28","type":"tafel","name":"Picknicktafel","x":96.9,"y":45.2,"w":2.0,"h":1.6,"rot":0},{"id":"t29","type":"tafel","name":"Picknicktafel","x":102.7,"y":45.2,"w":2.0,"h":1.6,"rot":0},{"id":"t30","type":"tafel","name":"Picknicktafel","x":79.5,"y":49.0,"w":2.0,"h":1.6,"rot":0},{"id":"t31","type":"tafel","name":"Picknicktafel","x":85.3,"y":49.0,"w":2.0,"h":1.6,"rot":0},{"id":"t32","type":"tafel","name":"Picknicktafel","x":91.1,"y":49.0,"w":2.0,"h":1.6,"rot":0},{"id":"t33","type":"tafel","name":"Picknicktafel","x":96.9,"y":49.0,"w":2.0,"h":1.6,"rot":0},{"id":"t34","type":"tafel","name":"Picknicktafel","x":102.7,"y":49.0,"w":2.0,"h":1.6,"rot":0},{"id":"t35","type":"loket","name":"Bandjes opladen · bonnetjes","x":147.5,"y":76.0,"w":6.06,"h":2.44,"rot":3.8},{"id":"t36","type":"lane","name":"UIT","x":20.0,"y":89.8,"w":8,"h":3.1,"rot":180,"col":"#dc2626"},{"id":"t37","type":"lane","name":"IN · met bandje","x":20.0,"y":93.0,"w":8,"h":3.1,"rot":0,"col":"#16a34a"},{"id":"t38","type":"lane","name":"IN · zonder bandje (kassa)","x":20.0,"y":96.2,"w":8,"h":3.1,"rot":0,"col":"#f59e0b"},{"id":"t39","type":"poort","name":"Ingangspoort","x":15.5,"y":93.0,"w":1.0,"h":10.0,"rot":0},{"id":"t40","type":"was","name":"Handen wassen","x":37.76,"y":113.5,"w":3.0,"h":0.8,"rot":90},{"id":"t41","type":"wc","name":"Toiletten · 10 cabines","x":37.46,"y":121.5,"w":1.2,"h":12.0,"rot":0},{"id":"t42","type":"was","name":"Handen wassen","x":37.57,"y":129.5,"w":3.0,"h":0.8,"rot":90},{"id":"t43","type":"wc","name":"Toiletten · 10 cabines","x":37.27,"y":137.5,"w":1.2,"h":12.0,"rot":0},{"id":"t44","type":"wc","name":"Toiletten · 10 cabines","x":30.0,"y":146.3,"w":1.2,"h":12.0,"rot":90},{"id":"t45","type":"uri","name":"Urinoir","x":27.18,"y":118.67,"w":1.3,"h":1.3,"rot":0},{"id":"t46","type":"uri","name":"Urinoir","x":27.18,"y":124.2,"w":1.3,"h":1.3,"rot":0},{"id":"t47","type":"uri","name":"Urinoir","x":27.18,"y":129.74,"w":1.3,"h":1.3,"rot":0},{"id":"t48","type":"uri","name":"Urinoir","x":27.18,"y":135.28,"w":1.3,"h":1.3,"rot":0},{"id":"t49","type":"uri","name":"Urinoir","x":27.18,"y":140.82,"w":1.3,"h":1.3,"rot":0},{"id":"t50","type":"was","name":"Handen wassen","x":27.18,"y":112.3,"w":3.0,"h":0.8,"rot":90},{"id":"t51","type":"hek","name":"Hek · backstage","x":28.57,"y":87.15,"w":8.93,"h":0.3,"rot":-0.45},{"id":"t52","type":"hek","name":"Hek · backstage","x":59.09,"y":47.45,"w":5.08,"h":0.3,"rot":-86.6},{"id":"t53","type":"hek","name":"Hek · einde toiletzone","x":29.98,"y":147.4,"w":15.85,"h":0.3,"rot":180.0},{"id":"t54","type":"hek","name":"Hek · einde toiletzone","x":22.05,"y":147.03,"w":0.73,"h":0.3,"rot":-90.0},{"id":"t55","type":"hek","name":"Hek · ingang","x":12.88,"y":88.1,"w":5.24,"h":0.3,"rot":177.81},{"id":"t56","type":"hek","name":"Hek · ingang","x":15.5,"y":98.75,"w":1.49,"h":0.3,"rot":90.0},{"id":"t57","type":"hek","name":"Hek · backstage podium","x":153.52,"y":75.66,"w":8.77,"h":0.3,"rot":-82.46},{"id":"t58","type":"hek","name":"Hek · backstage podium","x":152.16,"y":98.75,"w":2.16,"h":0.3,"rot":136.5},{"id":"t59","type":"hek","name":"Hek · backstage podium","x":149.55,"y":101.24,"w":5.07,"h":0.3,"rot":136.23},{"id":"t60","type":"hek","name":"Hek · backstage podium","x":147.45,"y":106.99,"w":8.0,"h":0.3,"rot":93.8},{"id":"t61","type":"hek","name":"Hek · backstage podium","x":147.19,"y":112.67,"w":3.38,"h":0.3,"rot":90.0},{"id":"t62","type":"hek","name":"Hek · straatkant","x":232.04,"y":91.27,"w":1.72,"h":0.3,"rot":0.0},{"id":"t63","type":"hek","name":"Hek · straatkant","x":232.9,"y":101.09,"w":19.63,"h":0.3,"rot":90.0},{"id":"t64","type":"hek","name":"Hek · straatkant","x":229.68,"y":114.61,"w":9.82,"h":0.3,"rot":130.96}]};
+const WM=D.size[0],HM=D.size[1],OB=D.obst,OV=D.over,CR=D.crowns,KEY='kruger-festival-plan-v3';
+OB.forEach(o=>{if(o.t==='p'){const xs=o.p.map(q=>q[0]),ys=o.p.map(q=>q[1]);o.bb=[Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys)];}});
+const T={stage:{n:'Podium',w:12,h:18,z:10,lv:'g'},foh:{n:'Regietoren',w:4,h:4,z:3,lv:'g'},vip:{n:'VIP-platform (verhoogd)',w:20,h:8,z:5.5,lv:'d'},bar:{n:'Bar',w:10,h:1.6,z:1.2,lv:'g'},trap:{n:'Trap',w:1.5,h:4.5,z:2.5,lv:'g'},
+tent:{n:'Tent',w:12,h:6,z:3.5,lv:'g'},stretch:{n:'Stretchtent',w:16,h:10,z:4.2,lv:'d'},tafel:{n:'Picknicktafel',w:2,h:1.6,z:0.8,lv:'g',nolabel:1},food:{n:'Foodcontainer',w:6.06,h:2.44,z:2.6,lv:'g'},
+loket:{n:'Loket / container',w:6.06,h:2.44,z:2.6,lv:'g'},lane:{n:'Doorgang met dranghekken',w:8,h:3.2,z:1.1,lv:'g'},poort:{n:'Poort',w:1,h:10,z:4.4,lv:'d'},wc:{n:'Toiletten',w:1.2,h:12,z:2.3,lv:'g'},
+uri:{n:'Urinoir',w:1.3,h:1.3,z:1.8,lv:'g',nolabel:1},was:{n:'Handen wassen',w:3,h:0.8,z:1,lv:'g'},hek:{n:'Hek',w:10,h:0.3,z:2,lv:'h'},zone:{n:'Zone (vlak)',w:20,h:8,z:0,lv:'z'},vrij:{n:'Vrij object',w:4,h:4,z:2,lv:'g'}};
+const ORDER={z:0,d:1,g:2,h:3};
+const $=id=>document.getElementById(id),svg=$('svg'),gO=$('objs'),gL=$('labs'),gV=$('ovl');
+const nl=v=>(Math.round(v*10)/10).toString().replace('.',','),rad=d=>d*Math.PI/180,esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let objs=[],sel=null,hist=[],hi=-1,snap=true,showDim=true,measuring=false,meas=[],vb={x:0,y:0,w:WM,h:HM},seq=1000,R={};
+const zv=o=>o.z!=null?o.z:T[o.type].z;
+// ---------- geometry
+function corners(o){const c=Math.cos(rad(o.rot)),s=Math.sin(rad(o.rot)),a=o.w/2,b=o.h/2;return[[-a,-b],[a,-b],[a,b],[-a,b]].map(([u,v])=>[o.x+u*c-v*s,o.y+u*s+v*c]);}
+function segX(a,b,c,d){const o=(p,q,r)=>(q[0]-p[0])*(r[1]-p[1])-(q[1]-p[1])*(r[0]-p[0]);const d1=o(a,b,c),d2=o(a,b,d),d3=o(c,d,a),d4=o(c,d,b);return((d1>0)!==(d2>0))&&((d3>0)!==(d4>0));}
+function inPoly(p,x,y){let c=false;for(let i=0,j=p.length-1;i<p.length;j=i++){const a=p[i],b=p[j];if((a[1]>y)!==(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])c=!c;}return c;}
+function polyX(A,B){for(let i=0;i<A.length;i++)for(let j=0;j<B.length;j++)if(segX(A[i],A[(i+1)%A.length],B[j],B[(j+1)%B.length]))return true;return inPoly(B,A[0][0],A[0][1])||inPoly(A,B[0][0],B[0][1]);}
+function rectCircle(o,cx,cy,r){const c=Math.cos(rad(o.rot)),s=Math.sin(rad(o.rot)),dx=cx-o.x,dy=cy-o.y,lx=dx*c+dy*s,ly=-dx*s+dy*c,qx=Math.max(Math.abs(lx)-o.w/2,0),qy=Math.max(Math.abs(ly)-o.h/2,0);return qx*qx+qy*qy<r*r;}
+function evalAll(){const res={},C={};for(const o of objs){res[o.id]={hard:[],soft:[]};C[o.id]=corners(o);}
+  for(const o of objs){const lv=T[o.type].lv;if(lv==='z'||lv==='h')continue;const c=C[o.id],r=res[o.id],rr=Math.hypot(o.w,o.h)/2,z=zv(o),names={};
+    if(c.some(p=>p[0]<0||p[1]<0||p[0]>WM||p[1]>HM))r.hard.push('valt buiten de plattegrond');
+    for(const b of OB){if(b.t==='c'){if(Math.hypot(b.x-o.x,b.y-o.y)>rr+b.r)continue;if(rectCircle(o,b.x,b.y,b.r))names[b.n]=(names[b.n]||0)+1;}
+      else{if(b.bb[0]>o.x+rr||b.bb[2]<o.x-rr||b.bb[1]>o.y+rr||b.bb[3]<o.y-rr)continue;if(polyX(c,b.p))names[b.n]=(names[b.n]||0)+1;}}
+    const nn=Object.keys(names).map(n=>n+(names[n]>1?' ('+names[n]+'×)':''));if(nn.length)r.hard.push('kan hier niet staan, in de weg: '+nn.join(', '));
+    for(const v of OV)if(z>v.clear&&polyX(c,v.p))r.hard.push('past niet onder '+v.n+' (vrije hoogte ca. '+nl(v.clear)+' m, dit object is '+nl(z)+' m hoog)');
+    if(z>3){let k=0;for(const t of CR)if(rectCircle(o,t.x,t.y,t.r))k++;if(k)r.soft.push('boomkruin erboven ('+k+'×): snoeien of opschuiven');}}
+  for(let i=0;i<objs.length;i++)for(let j=i+1;j<objs.length;j++){const a=objs[i],b=objs[j],la=T[a.type].lv,lb=T[b.type].lv;if(la!==lb||la==='z'||la==='h')continue;
+    if(Math.hypot(a.x-b.x,a.y-b.y)>(Math.hypot(a.w,a.h)+Math.hypot(b.w,b.h))/2)continue;
+    if(polyX(C[a.id],C[b.id])){res[a.id].hard.push('overlapt met: '+b.name);res[b.id].hard.push('overlapt met: '+a.name);}}
+  return res;}
+// ---------- drawing
+function shape(o){const w=o.w,h=o.h,x=-w/2,y=-h/2,R_=`x="${x}" y="${y}" width="${w}" height="${h}"`;
+  switch(o.type){
+  case'stage':{const wg=Math.min(2.4,h*0.14);return`<rect ${R_} fill="#111827" stroke="#000" stroke-width=".15"/><rect x="${x+0.8}" y="${y+wg}" width="${w-0.8}" height="${h-2*wg}" fill="#374151"/><line x1="${w/2}" y1="${y}" x2="${w/2}" y2="${-y}" stroke="#f59e0b" stroke-width=".5"/><path d="M${w/2+0.4} -1.6L${w/2+2.6} 0L${w/2+0.4} 1.6z" fill="#f59e0b"/>`;}
+  case'foh':return`<rect ${R_} fill="#1f2937" stroke="#000" stroke-width=".12"/><path d="M${x} ${y}L${-x} ${-y}M${x} ${-y}L${-x} ${y}" stroke="#9ca3af" stroke-width=".12"/>`;
+  case'vip':return`<rect ${R_} fill="#ede9fe" fill-opacity=".8" stroke="#6d28d9" stroke-width=".25"/><rect ${R_} fill="url(#hv)"/>`;
+  case'bar':return`<rect ${R_} fill="#92400e" stroke="#451a03" stroke-width=".12"/>`;
+  case'trap':{let s=`<rect ${R_} fill="#e5e7eb" stroke="#374151" stroke-width=".1"/>`;for(let t=y+0.5;t<-y;t+=0.5)s+=`<line x1="${x}" y1="${t}" x2="${-x}" y2="${t}" stroke="#6b7280" stroke-width=".06"/>`;return s;}
+  case'tent':return`<rect ${R_} fill="#ffffff" fill-opacity=".9" stroke="#0f766e" stroke-width=".22"/><path d="M${x} ${y}L${-x} ${-y}M${x} ${-y}L${-x} ${y}" stroke="#0f766e" stroke-width=".1"/>`;
+  case'stretch':{const k=Math.min(1.6,Math.min(w,h)*0.14);return`<path d="M${x} ${y}Q0 ${y+k} ${-x} ${y}Q${-x-k} 0 ${-x} ${-y}Q0 ${-y-k} ${x} ${-y}Q${x+k} 0 ${x} ${y}z" fill="#fef9c3" fill-opacity=".75" stroke="#a16207" stroke-width=".22"/>`+[[x,y],[-x,y],[-x,-y],[x,-y],[-w/5,0],[w/5,0]].map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r=".22" fill="#a16207"/>`).join('');}
+  case'tafel':return`<rect x="${x}" y="${-h*0.22}" width="${w}" height="${h*0.44}" fill="#b45309"/><rect x="${x}" y="${y}" width="${w}" height="${h*0.2}" fill="#d97706"/><rect x="${x}" y="${-y-h*0.2}" width="${w}" height="${h*0.2}" fill="#d97706"/>`;
+  case'food':return`<rect ${R_} fill="#0b0b0c" stroke="#000" stroke-width=".1"/><line x1="${x+0.4}" y1="${y}" x2="${-x-0.4}" y2="${y}" stroke="#f59e0b" stroke-width=".3"/>`;
+  case'loket':return`<rect ${R_} fill="#0369a1" stroke="#082f49" stroke-width=".1"/><line x1="${x+0.4}" y1="${-y}" x2="${-x-0.4}" y2="${-y}" stroke="#fff" stroke-width=".3"/>`;
+  case'lane':{const c=o.col||'#16a34a';return`<rect ${R_} fill="${c}" fill-opacity=".28" stroke="${c}" stroke-width=".18"/><path d="M${x+1} 0H${-x-2.2}M${-x-2.2} -0.9L${-x-0.8} 0L${-x-2.2} 0.9z" stroke="${c}" stroke-width=".3" fill="${c}"/>`;}
+  case'poort':return`<rect ${R_} fill="#111" fill-opacity=".15" stroke="#111" stroke-width=".3"/><rect x="${x}" y="${y}" width="${w}" height=".6" fill="#111"/><rect x="${x}" y="${-y-0.6}" width="${w}" height=".6" fill="#111"/>`;
+  case'wc':{let s=`<rect ${R_} fill="#bfdbfe" stroke="#1d4ed8" stroke-width=".12"/>`;const L=h>w;const n=Math.max(1,Math.round((L?h:w)/1.2));for(let i=1;i<n;i++){const t=(L?y:x)+i*(L?h:w)/n;s+=L?`<line x1="${x}" y1="${t}" x2="${-x}" y2="${t}" stroke="#1d4ed8" stroke-width=".06"/>`:`<line x1="${t}" y1="${y}" x2="${t}" y2="${-y}" stroke="#1d4ed8" stroke-width=".06"/>`;}return s;}
+  case'uri':{const r=Math.min(w,h)/2;return`<rect ${R_} fill="#fff" fill-opacity="0"/><circle r="${r}" fill="#93c5fd" stroke="#1d4ed8" stroke-width=".1"/><path d="M${-r} 0H${r}M0 ${-r}V${r}" stroke="#1d4ed8" stroke-width=".1"/>`;}
+  case'was':return`<rect ${R_} fill="#67e8f9" stroke="#0e7490" stroke-width=".1"/>`;
+  case'hek':return`<rect x="${x}" y="-0.9" width="${w}" height="1.8" fill="#fff" fill-opacity="0"/><line x1="${x}" y1="0" x2="${-x}" y2="0" stroke="#ea580c" stroke-width=".28" stroke-dasharray="1.2 .35"/><circle cx="${x}" r=".3" fill="#ea580c"/><circle cx="${-x}" r=".3" fill="#ea580c"/>`;
+  case'zone':return`<rect ${R_} fill="#fde68a" fill-opacity=".35" stroke="#a16207" stroke-width=".16" stroke-dasharray=".9 .6"/><rect ${R_} fill="url(#hz)"/>`;
+  default:return`<rect ${R_} fill="#d1d5db" stroke="#374151" stroke-width=".12"/>`;}}
+function render(){R=evalAll();const sorted=[...objs].sort((a,b)=>ORDER[T[a.type].lv]-ORDER[T[b.type].lv]);let so='',sl='';
+  for(const o of sorted){const r=R[o.id],bad=r.hard.length,warn=r.soft.length,lv=T[o.type].lv;
+    so+=`<g class="obj" data-id="${o.id}" transform="translate(${o.x} ${o.y}) rotate(${o.rot})">${shape(o)}${bad?`<rect x="${-o.w/2-0.25}" y="${-Math.max(o.h,0.9)/2-0.25}" width="${o.w+0.5}" height="${Math.max(o.h,0.9)+0.5}" fill="#dc2626" fill-opacity=".22" stroke="#dc2626" stroke-width=".4"/>`:warn?`<rect x="${-o.w/2-0.2}" y="${-o.h/2-0.2}" width="${o.w+0.4}" height="${o.h+0.4}" fill="none" stroke="#d97706" stroke-width=".3" stroke-dasharray=".8 .5"/>`:''}</g>`;
+    if(T[o.type].nolabel)continue;let a=o.rot+(o.h>o.w?90:0);a=((a+90)%180+180)%180-90;const L=Math.max(o.w,o.h),S=Math.min(o.w,o.h),fs=Math.max(0.75,Math.min(2.3,L/Math.max(7,o.name.length)*1.7,lv==='h'?1.1:Math.max(1,S*0.42)));
+    const dark=['stage','food','foh','loket','bar'].includes(o.type),fill=bad?'#7f1d1d':dark?'#fff':'#111827',halo=bad?'#fff':dark?'#000':'#fff',dy=lv==='h'?-0.6:0;
+    const dim=showDim&&lv!=='z'?(lv==='h'?nl(o.w)+' m':nl(o.w)+' × '+nl(o.h)+' m'):'';
+    sl+=`<g transform="translate(${o.x} ${o.y}) rotate(${a})"><text class="lab" text-anchor="middle" y="${dy+(dim&&lv!=='h'?-0.1:fs*0.35)}" font-size="${fs}" fill="${fill}" stroke="${halo}" stroke-width="${fs*0.22}">${esc(o.name)}</text>${dim?`<text class="lab" text-anchor="middle" y="${lv==='h'?fs*0.95+0.5:fs*0.95}" font-size="${fs*0.72}" fill="${fill}" stroke="${halo}" stroke-width="${fs*0.18}" font-weight="400">${dim}</text>`:''}</g>`;}
+  gO.innerHTML=so;gL.innerHTML=sl;overlay();messages();}
+function overlay(){let s='';const o=objs.find(q=>q.id===sel);
+  if(o){const hh=Math.max(o.h,0.9);s+=`<g transform="translate(${o.x} ${o.y}) rotate(${o.rot})"><rect x="${-o.w/2-0.4}" y="${-hh/2-0.4}" width="${o.w+0.8}" height="${hh+0.8}" fill="none" stroke="#1d4ed8" stroke-width=".25" stroke-dasharray=".8 .5" pointer-events="none"/><line x1="${o.w/2+0.4}" y1="0" x2="${o.w/2+2.6}" y2="0" stroke="#1d4ed8" stroke-width=".15" pointer-events="none"/><circle class="hdl" data-h="rot" cx="${o.w/2+2.6}" cy="0" r="${Math.max(0.8,vb.w/160)}" fill="#1d4ed8" stroke="#fff" stroke-width=".2"/></g>`;}
+  if(meas.length){const a=meas[0],b=meas[1]||meas[0];s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="#c2410c" stroke-width=".3" pointer-events="none"/><circle cx="${a[0]}" cy="${a[1]}" r=".5" fill="#c2410c"/><circle cx="${b[0]}" cy="${b[1]}" r=".5" fill="#c2410c"/>`;
+    if(meas[1]){const fs=Math.max(1.6,vb.w/90);s+=`<text class="lab" x="${(a[0]+b[0])/2}" y="${(a[1]+b[1])/2-0.8}" text-anchor="middle" font-size="${fs}" fill="#c2410c" stroke="#fff" stroke-width="${fs*0.25}">${nl(Math.hypot(b[0]-a[0],b[1]-a[1]))} m</text>`;}}
+  gV.innerHTML=s;}
+function messages(){let h='',n=0,w=0;for(const o of objs){const r=R[o.id];if(r.hard.length){n++;h+=`<div class="h" data-id="${o.id}"><b>✖ ${esc(o.name)}</b>${r.hard.map(esc).join('<br>')}</div>`;}}
+  for(const o of objs){const r=R[o.id];if(!r.hard.length&&r.soft.length){w++;h+=`<div class="s" data-id="${o.id}"><b>⚠ ${esc(o.name)}</b>${r.soft.map(esc).join('<br>')}</div>`;}}
+  $('msgs').innerHTML=h||'<div style="color:var(--mut);cursor:default">Geen conflicten: niets staat op een obstakel of op een ander object.</div>';
+  const st=$('status');st.className=n?'bad':'ok';st.textContent=n?`✖ ${n} conflict${n>1?'en':''}`:(w?`✔ geen conflicten · ${w} waarschuwing${w>1?'en':''}`:'✔ geen conflicten');}
+function props(){const o=objs.find(q=>q.id===sel),p=$('props');if(!o){p.innerHTML='<div id="none">Klik op een object op de plattegrond.</div>';return;}
+  const lv=T[o.type].lv,f=(k,l,v,st)=>`<label class="f">${l}<input type="number" data-k="${k}" value="${v}" step="${st}"></label>`;
+  p.innerHTML=`<label class="f">Naam<input type="text" data-k="name" value="${esc(o.name)}"></label>`+f('w',lv==='h'?'Lengte (m)':'Lengte (m)',o.w,0.1)+(lv==='h'?'':f('h','Breedte (m)',o.h,0.1))+(lv==='z'||lv==='h'?'':f('z','Hoogte (m)',zv(o),0.1))+f('rot','Draaiing (°)',Math.round(o.rot*10)/10,1)+f('x','Positie x (m)',Math.round(o.x*100)/100,0.1)+f('y','Positie y (m)',Math.round(o.y*100)/100,0.1)
+   +`<div style="color:var(--mut);font-size:12px">${T[o.type].n}${lv==='z'||lv==='h'?' · wordt niet op botsingen gecontroleerd':''}${lv==='z'||lv==='h'?'':' · oppervlakte '+nl(o.w*o.h)+' m²'}</div><div class="row"><button data-a="rl">⟲ 15°</button><button data-a="rr">⟳ 15°</button><button data-a="dup">Kopie</button><button data-a="del" class="danger">Verwijder</button></div>`;}
+// ---------- state
+function save(){try{localStorage.setItem(KEY,JSON.stringify(objs));$('saved').textContent='Automatisch bewaard in deze browser om '+new Date().toLocaleTimeString('nl-BE',{hour:'2-digit',minute:'2-digit'});}catch(e){$('saved').textContent='Automatisch bewaren lukt niet in deze browser: gebruik "Opslaan als bestand".';}}
+function commit(){hist=hist.slice(0,hi+1);hist.push(JSON.stringify(objs));if(hist.length>120)hist.shift();hi=hist.length-1;save();}
+function restore(i){hi=i;objs=JSON.parse(hist[hi]);if(!objs.find(o=>o.id===sel))sel=null;save();render();props();}
+function setObjs(a,keep){objs=a.map(o=>({id:o.id||('n'+(seq++)),type:T[o.type]?o.type:'vrij',name:String(o.name||T[o.type]?.n||'Object'),x:+o.x,y:+o.y,w:Math.max(0.2,+o.w),h:Math.max(0.2,+o.h),rot:+o.rot||0,...(o.z!=null?{z:+o.z}:{}),...(o.col?{col:o.col}:{})}));sel=null;if(!keep){hist=[];hi=-1;}commit();render();props();}
+let toastT;function toast(t,good){const e=$('toast');e.textContent=t;e.className=good?'good':'';e.style.display='block';clearTimeout(toastT);toastT=setTimeout(()=>e.style.display='none',4200);}
+// ---------- view
+function setVB(){svg.setAttribute('viewBox',`${vb.x} ${vb.y} ${vb.w} ${vb.h}`);}
+function fit(){vb={x:-4,y:-4,w:WM+8,h:HM+8};setVB();overlay();}
+function wpt(e){const p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;const q=p.matrixTransform(svg.getScreenCTM().inverse());return[q.x,q.y];}
+svg.addEventListener('wheel',e=>{e.preventDefault();const p=wpt(e),f=Math.exp(e.deltaY*0.0015),nw=Math.max(12,Math.min(WM*1.6,vb.w*f)),k=nw/vb.w;vb.x=p[0]-(p[0]-vb.x)*k;vb.y=p[1]-(p[1]-vb.y)*k;vb.w=nw;vb.h*=k;setVB();overlay();},{passive:false});
+let drag=null,raf=0;
+svg.addEventListener('pointerdown',e=>{const p=wpt(e);
+  if(measuring){if(meas.length>=2)meas=[];meas.push(p);overlay();return;}
+  const hd=e.target.closest('.hdl'),g=e.target.closest('.obj');svg.setPointerCapture(e.pointerId);
+  if(hd&&sel){drag={k:'rot',moved:false};return;}
+  if(g){sel=g.dataset.id;const o=objs.find(q=>q.id===sel);drag={k:'move',dx:o.x-p[0],dy:o.y-p[1],moved:false,before:(R[o.id]||{hard:[]}).hard.length};render();props();return;}
+  sel=null;drag={k:'pan',s:p};svg.style.cursor='grabbing';overlay();props();});
+svg.addEventListener('pointermove',e=>{const p=wpt(e);$('pos').textContent='positie '+nl(p[0])+' m , '+nl(p[1])+' m';
+  if(measuring&&meas.length===1){meas[1]=p;overlay();meas.length=1;return;}
+  if(!drag)return;const o=objs.find(q=>q.id===sel);
+  if(drag.k==='pan'){vb.x+=drag.s[0]-p[0];vb.y+=drag.s[1]-p[1];setVB();return;}
+  if(!o)return;drag.moved=true;
+  if(drag.k==='move'){const st=snap?0.5:0.05;o.x=Math.round((p[0]+drag.dx)/st)*st;o.y=Math.round((p[1]+drag.dy)/st)*st;o.x=Math.round(o.x*100)/100;o.y=Math.round(o.y*100)/100;}
+  else{let a=Math.atan2(p[1]-o.y,p[0]-o.x)*180/Math.PI;const st=e.shiftKey?1:5;o.rot=Math.round(a/st)*st;}
+  if(!raf)raf=requestAnimationFrame(()=>{raf=0;render();props();});});
+function drop(){if(!drag)return;const d=drag;drag=null;svg.style.cursor='grab';if(d.k==='pan'||!d.moved)return;render();commit();const o=objs.find(q=>q.id===sel);if(o){const r=R[o.id];if(r.hard.length)toast('✖ '+o.name+' '+r.hard.join(' · '));else if(d.before)toast('✔ '+o.name+' staat nu vrij',true);}}
+svg.addEventListener('pointerup',drop);svg.addEventListener('pointercancel',drop);
+// ---------- panel actions
+function act(a){const o=objs.find(q=>q.id===sel);if(!o)return;
+  if(a==='rl')o.rot=((o.rot-15)%360+360)%360;else if(a==='rr')o.rot=(o.rot+15)%360;
+  else if(a==='del'){objs=objs.filter(q=>q!==o);sel=null;}
+  else if(a==='dup'){const c={...o,id:'n'+(seq++),x:o.x+2,y:o.y+2};objs.push(c);sel=c.id;}
+  render();props();commit();}
+$('props').addEventListener('click',e=>{const a=e.target.dataset&&e.target.dataset.a;if(a)act(a);});
+$('props').addEventListener('change',e=>{const k=e.target.dataset.k,o=objs.find(q=>q.id===sel);if(!k||!o)return;if(k==='name')o.name=e.target.value||T[o.type].n;else{let v=parseFloat(String(e.target.value).replace(',','.'));if(!isFinite(v))return;if(k==='w'||k==='h')v=Math.max(0.2,v);if(k==='z')v=Math.max(0,v);o[k]=v;}render();props();commit();});
+$('msgs').addEventListener('click',e=>{const d=e.target.closest('[data-id]');if(!d)return;sel=d.dataset.id;const o=objs.find(q=>q.id===sel);if(o){const w=Math.max(60,Math.max(o.w,o.h)*4),h=w*vb.h/vb.w;vb={x:o.x-w/2,y:o.y-h/2,w,h};setVB();}render();props();});
+const pal=$('pal');for(const k in T){const b=document.createElement('button');b.textContent='+ '+T[k].n;b.onclick=()=>{const o={id:'n'+(seq++),type:k,name:T[k].n,x:Math.round((vb.x+vb.w/2)*2)/2,y:Math.round((vb.y+vb.h/2)*2)/2,w:T[k].w,h:T[k].h,rot:0};objs.push(o);sel=o.id;render();props();commit();const r=R[o.id];if(r.hard.length)toast('✖ '+o.name+' '+r.hard[0]);};pal.appendChild(b);}
+$('bUndo').onclick=()=>{if(hi>0)restore(hi-1);};$('bRedo').onclick=()=>{if(hi<hist.length-1)restore(hi+1);};
+$('bMeas').onclick=()=>{measuring=!measuring;meas=[];$('bMeas').classList.toggle('on',measuring);svg.style.cursor=measuring?'crosshair':'grab';overlay();if(measuring)toast('Klik twee punten aan om de afstand te meten. Klik opnieuw op Meten om te stoppen.',true);};
+$('bSnap').onclick=()=>{snap=!snap;$('bSnap').classList.toggle('on',snap);};$('bDim').onclick=()=>{showDim=!showDim;$('bDim').classList.toggle('on',showDim);render();};$('bFit').onclick=fit;
+function dl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},500);}
+$('bSave').onclick=()=>dl(new Blob([JSON.stringify({app:'kruger-festival-plan',v:1,objs},null,1)],{type:'application/json'}),'kruger-festival-ontwerp.json');
+$('bOpen').onclick=()=>$('file').click();
+$('file').onchange=e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const j=JSON.parse(rd.result),a=Array.isArray(j)?j:j.objs;if(!Array.isArray(a))throw 0;setObjs(a,true);toast('Ontwerp geopend: '+a.length+' objecten',true);}catch(x){toast('Dit bestand is geen bewaard festivalontwerp.');}};rd.readAsText(f);e.target.value='';};
+$('bReset').onclick=()=>{if(confirm('Alle eigen wijzigingen wissen en terug naar het beginontwerp?'))setObjs(JSON.parse(JSON.stringify(D.objs)),true);};
+$('bPrint').onclick=()=>{const old={...vb};sel=null;vb={x:0,y:0,w:WM,h:HM};setVB();overlay();window.print();vb=old;setVB();};
+$('bPng').onclick=()=>{const s=svg.cloneNode(true);s.querySelector('#ovl').innerHTML='';const W=4200,H=Math.round(W*HM/WM);s.setAttribute('viewBox',`0 0 ${WM} ${HM}`);s.setAttribute('width',W);s.setAttribute('height',H);
+  const img=new Image();img.onload=()=>{const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,W,H);x.drawImage(img,0,0,W,H);c.toBlob(b=>b?dl(b,'kruger-festival-plattegrond.png'):toast('De afbeelding kon niet gemaakt worden.'),'image/png');};
+  img.onerror=()=>toast('De afbeelding kon niet gemaakt worden. Gebruik Afdrukken en kies "Bewaar als PDF".');img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(new XMLSerializer().serializeToString(s));};
+window.addEventListener('keydown',e=>{if(/INPUT|TEXTAREA/.test(document.activeElement.tagName))return;const o=objs.find(q=>q.id===sel),m=e.ctrlKey||e.metaKey;
+  if(m&&e.key.toLowerCase()==='z'){e.preventDefault();e.shiftKey?$('bRedo').click():$('bUndo').click();return;}if(m&&e.key.toLowerCase()==='y'){e.preventDefault();$('bRedo').click();return;}
+  if(e.key==='Escape'){meas=[];sel=null;render();props();return;}if(!o)return;
+  if(m&&e.key.toLowerCase()==='d'){e.preventDefault();act('dup');}else if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();act('del');}
+  else if(e.key.toLowerCase()==='r'){act(e.shiftKey?'rl':'rr');}
+  else if(e.key.startsWith('Arrow')){e.preventDefault();const s=e.shiftKey?1:0.1;o.x=Math.round((o.x+(e.key==='ArrowRight'?s:e.key==='ArrowLeft'?-s:0))*100)/100;o.y=Math.round((o.y+(e.key==='ArrowDown'?s:e.key==='ArrowUp'?-s:0))*100)/100;render();props();commit();}});
+// ---------- start
+let start=null;try{const s=localStorage.getItem(KEY);if(s){const a=JSON.parse(s);if(Array.isArray(a)&&a.length)start=a;}}catch(e){}
+setObjs(start||JSON.parse(JSON.stringify(D.objs)));fit();
+window.__plan={get objs(){return objs;},get R(){return R;},evalAll,setObjs,D,render,commit,select(id){sel=id;render();props();},view(x,y,w){vb={x,y,w,h:w*svg.clientHeight/svg.clientWidth};setVB();overlay();},scr(x,y){const p=svg.createSVGPoint();p.x=x;p.y=y;const q=p.matrixTransform(svg.getScreenCTM());return[q.x,q.y];}};
+</script></body></html>

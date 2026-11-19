@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="nl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Krüger Festival 3D</title>
+<style>
+:root{color-scheme:dark;--ink:#eef0f3;--mut:#a9b0bb;--bg:rgba(14,16,20,.82);--amb:#ffc83d;--cya:#4fd1ff}
+html,body{margin:0;height:100%;overflow:hidden;background:#0e1014;color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab}
+.panel{position:fixed;background:var(--bg);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 12px;backdrop-filter:blur(6px)}
+#help{left:12px;top:12px;max-width:330px}
+#help h1{font-size:15px;margin:0 0 6px}
+#help table{border-collapse:collapse}#help td{padding:1px 8px 1px 0;vertical-align:top}#help td:first-child{color:var(--amb);white-space:nowrap;font-weight:600}
+#help small{color:var(--mut);display:block;margin-top:6px}
+#hud{left:12px;bottom:12px;font-variant-numeric:tabular-nums;color:var(--ink)}
+#hud b{color:var(--amb)}
+#mapwrap{right:12px;top:12px;padding:6px}
+#map{display:block;width:340px;border-radius:6px;cursor:crosshair}
+#mapwrap.big #map{width:min(78vw,1100px)}
+#mapcap{color:var(--mut);font-size:12px;margin-top:4px;text-align:right}
+#prompt{left:50%;bottom:64px;transform:translateX(-50%);display:none;font-size:15px;white-space:nowrap}
+#prompt b{color:var(--amb)}
+#start{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(8,9,12,.72);z-index:5}
+#start div{max-width:520px;text-align:center;padding:28px;border-radius:14px;background:#171a20;border:1px solid rgba(255,255,255,.14)}
+#start h2{margin:0 0 8px;font-size:22px}#start p{color:var(--mut);margin:6px 0}
+#start button{margin-top:14px;font:600 16px/1 inherit;padding:12px 22px;border-radius:9px;border:0;background:var(--amb);color:#16181c;cursor:pointer}
+#photo{position:fixed;inset:0;display:none;z-index:4;pointer-events:none}
+#photo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+#photocap{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:6;display:none;text-align:center}
+#cross{position:fixed;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:rgba(255,255,255,.7);pointer-events:none}
+</style></head><body>
+<canvas id="c"></canvas><div id="cross"></div>
+<div id="help" class="panel"><h1>Krüger festival – 3D-wandelmodel</h1>
+<table>
+<tr><td>Z Q S D / pijltjes</td><td>lopen (W A S D op qwerty)</td></tr>
+<tr><td>Muis</td><td>rondkijken (klik in beeld; Esc laat de muis los)</td></tr>
+<tr><td>Shift</td><td>rennen</td></tr>
+<tr><td>V</td><td>vliegen aan/uit (spatie omhoog, C omlaag)</td></tr>
+<tr><td>M</td><td>afstand meten vanaf hier</td></tr>
+<tr><td>K / N</td><td>grote kaart / namen aan-uit</td></tr>
+<tr><td>G</td><td>kaart wisselen: plattegrond ↔ luchtfoto</td></tr>
+<tr><td>L</td><td>avond ↔ dag (sfeerverlichting)</td></tr>
+<tr><td>P / H</td><td>30 ↔ 60 beelden per seconde / dit paneel</td></tr>
+</table><small>Klik op de kaart om ergens heen te springen. Loop de trap van het VIP-platform op om boven te staan; via dezelfde trap ga je weer naar beneden.</small></div>
+<div id="mapwrap" class="panel"><canvas id="map"></canvas><div id="mapcap">schaal: <span id="scalebar"></span></div></div>
+<div id="hud" class="panel"></div>
+<div id="prompt" class="panel"></div>
+<div id="photo"><img id="photoimg" alt=""></div><div id="photocap" class="panel"></div>
+<div id="start"><div><h2>Krüger festival – 3D-wandelmodel</h2><p>Je festivalontwerp op het schaalmodel van het terrein. Je start voor de ingang in de steeg. Druk op <b>L</b> voor de avondsfeer en loop de trap van het VIP-platform op om boven te staan.</p><p>Lopen met <b>Z Q S D</b> of de pijltjes, rondkijken met de muis.</p><button id="go">Start wandeling</button></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="scene.js"></script>
+<script>
+const S = window.SCENE;
+const TEX = "ground_tex.jpg", MINI = "minimap.jpg", PLAN = "plan_map_fest.png", TEX2 = "banner_tex.jpg";
+const PHOTOS = {};
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:'low-power'});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x9fb4c8); scene.fog = new THREE.Fog(0x9fb4c8, 220, 620);
+const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 1500); camera.rotation.order = 'YXZ';
+const hemi = new THREE.HemisphereLight(0xffffff, 0x777066, 0.95); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff, 0.55); sun.position.set(-80, 160, 60); scene.add(sun);
+const tex = new THREE.Texture(); const timg = new Image();
+timg.onload = () => { tex.image = timg; tex.flipY = false; tex.anisotropy = renderer.capabilities.getMaxAnisotropy(); tex.needsUpdate = true; };
+timg.src = TEX;
+const matTex = new THREE.MeshBasicMaterial({map: tex, side: THREE.DoubleSide});
+const matCol = new THREE.MeshLambertMaterial({vertexColors: true, side: THREE.DoubleSide});
+const tex2 = new THREE.Texture(); const timg2 = new Image(); timg2.onload = () => { tex2.image = timg2; tex2.flipY = false; tex2.anisotropy = renderer.capabilities.getMaxAnisotropy(); tex2.needsUpdate = true; }; timg2.src = TEX2;
+const matBan = new THREE.MeshBasicMaterial({map: tex2, side: THREE.DoubleSide}); const matGlow = new THREE.MeshBasicMaterial({vertexColors: true, side: THREE.DoubleSide});
+let tris = 0;
+for (const m of S.meshes) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(m.P.flat(), 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(m.N.flat(), 3));
+  if (m.kind === 'tex' || m.kind === 'ban') g.setAttribute('uv', new THREE.Float32BufferAttribute(m.A.flat(), 2));
+  else g.setAttribute('color', new THREE.Float32BufferAttribute(m.A.flat(), 3));
+  g.setIndex(m.I); tris += m.I.length / 3;
+  const mesh = new THREE.Mesh(g, ({tex: matTex, ban: matBan, glow: matGlow})[m.kind] || matCol); mesh.name = m.name; scene.add(mesh);
+}
+function sprite(text, color, fg, px) {
+  const c = document.createElement('canvas'); const x = c.getContext('2d'); x.font = '600 ' + px + 'px Helvetica,Arial,sans-serif';
+  const w = Math.max(px * 1.5, x.measureText(text).width + px * 0.9); c.width = Math.ceil(w); c.height = Math.ceil(px * 1.5);
+  x.font = '600 ' + px + 'px Helvetica,Arial,sans-serif'; x.fillStyle = color; const r = c.height / 2;
+  x.beginPath(); x.moveTo(r, 0); x.arcTo(c.width, 0, c.width, c.height, r); x.arcTo(c.width, c.height, 0, c.height, r); x.arcTo(0, c.height, 0, 0, r); x.arcTo(0, 0, c.width, 0, r); x.fill();
+  x.fillStyle = fg; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(text, c.width / 2, c.height / 2 + px * 0.04);
+  const t = new THREE.CanvasTexture(c); const s = new THREE.Sprite(new THREE.SpriteMaterial({map: t, depthTest: true, transparent: true}));
+  s.userData.aspect = c.width / c.height; return s;
+}
+const spotGroup = new THREE.Group(), nameGroup = new THREE.Group(); scene.add(spotGroup, nameGroup);
+for (const s of S.spots) {
+  const sp = sprite(s.label, s.drone ? '#4fd1ff' : '#ffc83d', '#16181c', 64); const h = s.drone ? 6 : 1.1;
+  sp.scale.set(h * sp.userData.aspect, h, 1); sp.position.set(s.x, s.drone ? s.h : 2.6, s.z); spotGroup.add(sp);
+  if (!s.drone) { const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.1, 6), new THREE.MeshBasicMaterial({color: 0xffc83d})); pole.position.set(s.x, 1.05, s.z); spotGroup.add(pole); }
+}
+for (const l of S.labels) { const sp = sprite(l.t, 'rgba(20,22,27,.85)', '#ffffff', 48); sp.scale.set(2.4 * sp.userData.aspect, 2.4, 1); sp.position.set(l.x, l.y, l.z); nameGroup.add(sp); }
+// ---------- movement
+const EYE = 1.7, RAD = 0.3; const OX = S.origin[0], OZ = S.origin[1], WM = S.size[0], HM = S.size[1];
+const pos = new THREE.Vector3(97 - OX, EYE, 86 - OZ); let yaw = Math.atan2(-1, -0.05), pitch = -0.04, fly = false, cap30 = true;
+const keys = {};
+function inPoly(p, x, z) { let c = false; for (let i = 0, j = p.length - 1; i < p.length; j = i++) { const a = p[i], b = p[j]; if ((a[1] > z) !== (b[1] > z) && x < (b[0] - a[0]) * (z - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; }
+function segDist(a, b, x, z) { const dx = b[0] - a[0], dz = b[1] - a[1]; let t = ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1); t = Math.max(0, Math.min(1, t)); return Math.hypot(x - a[0] - t * dx, z - a[1] - t * dz); }
+const bbox = S.colliders.map(p => [Math.min(...p.map(q => q[0])) - RAD, Math.min(...p.map(q => q[1])) - RAD, Math.max(...p.map(q => q[0])) + RAD, Math.max(...p.map(q => q[1])) + RAD]);
+function blocked(x, z) {
+  if (x < 1 - OX || x > WM - 1 - OX || z < 1 - OZ || z > HM - 1 - OZ) return true;
+  for (let k = 0; k < S.colliders.length; k++) { const b = bbox[k]; if (x < b[0] || x > b[2] || z < b[1] || z > b[3]) continue; const p = S.colliders[k];
+    if (inPoly(p, x, z)) return true; for (let i = 0; i < p.length; i++) if (segDist(p[i], p[(i + 1) % p.length], x, z) < RAD) return true; }
+  return false;
+}
+function setDir(dx, dz, pt) { yaw = Math.atan2(-dx, -dz); pitch = (pt || 0) * Math.PI / 180; }
+let locked = false, dragging = false;
+canvas.addEventListener('click', () => { if (!locked && canvas.requestPointerLock) { try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {} } });
+document.addEventListener('pointerlockchange', () => { locked = document.pointerLockElement === canvas; });
+canvas.addEventListener('mousedown', () => { dragging = true; }); window.addEventListener('mouseup', () => { dragging = false; });
+window.addEventListener('mousemove', e => { if (!locked && !dragging) return; const k = locked ? 0.0022 : -0.004; yaw -= e.movementX * k; pitch -= e.movementY * k; pitch = Math.max(-1.5, Math.min(1.5, pitch)); });
+window.addEventListener('keydown', e => { keys[e.code] = true; onKey(e); if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault(); });
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+// ---------- photos
+let photoOpen = false, cur = null, curIdx = 0, ghost = false; const pimg = document.getElementById('photoimg'), pwrap = document.getElementById('photo'), pcap = document.getElementById('photocap');
+function nearest(maxd) { let best = null, bd = maxd; for (const s of S.spots) { if (s.drone) continue; const d = Math.hypot(s.x - pos.x, s.z - pos.z); if (d < bd) { bd = d; best = s; } } return best; }
+function showPhoto() { const f = cur.files[curIdx]; pimg.src = PHOTOS[f]; pimg.style.opacity = ghost ? 0.5 : 1; pwrap.style.display = 'block'; pcap.style.display = 'block';
+  pcap.innerHTML = '<b>Standpunt ' + cur.label + '</b> · ' + f + ' (' + (curIdx + 1) + '/' + cur.files.length + ')' + (cur.drone ? ' · echte dronepositie' : ' · standpunt geschat') + '<br><span style="color:#a9b0bb">← → andere foto · T doorzichtig · F of Esc sluiten</span>'; }
+function openSpot(s) { cur = s; curIdx = 0; photoOpen = true; pos.x = s.x; pos.z = s.z; if (s.drone) { fly = true; pos.y = s.h; } else if (!fly) pos.y = EYE; setDir(s.dir[0], s.dir[1], s.pitch); showPhoto(); }
+function closePhoto() { photoOpen = false; pwrap.style.display = 'none'; pcap.style.display = 'none'; camera.fov = 62; camera.updateProjectionMatrix(); if (cur && cur.drone) { /* stay in fly mode */ } }
+let measure = null, showHelp = true;
+function onKey(e) {
+  if (e.code === 'KeyF') { if (photoOpen) closePhoto(); else { const s = nearest(spotGroup.visible ? 8 : 0); if (s) openSpot(s); } }
+  else if (e.code === 'Escape' && photoOpen) closePhoto();
+  else if (photoOpen && e.code === 'ArrowRight') { curIdx = (curIdx + 1) % cur.files.length; showPhoto(); }
+  else if (photoOpen && e.code === 'ArrowLeft') { curIdx = (curIdx + cur.files.length - 1) % cur.files.length; showPhoto(); }
+  else if (e.code === 'KeyT' && photoOpen) { ghost = !ghost; showPhoto(); }
+  else if (e.code === 'KeyV') { fly = !fly; if (!fly) { pos.y = EYE; deck = null; if (blocked(pos.x, pos.z)) { pos.x = 97 - OX; pos.z = 86 - OZ; } } }
+  else if (e.code === 'KeyM') { measure = measure ? null : pos.clone(); }
+  else if (e.code === 'KeyK') { document.getElementById('mapwrap').classList.toggle('big'); sizeMap(); }
+  else if (e.code === 'KeyN') { nameGroup.visible = !nameGroup.visible; }
+  else if (e.code === 'KeyL') { setNight(!night); }
+  else if (e.code === 'KeyO') { spotGroup.visible = !spotGroup.visible; }
+  else if (e.code === 'KeyG') { usePlan = !usePlan; }
+  else if (e.code === 'KeyP') { cap30 = !cap30; }
+  else if (e.code === 'KeyH') { showHelp = !showHelp; document.getElementById('help').style.display = showHelp ? 'block' : 'none'; }
+}
+// ---------- minimap
+const map = document.getElementById('map'), mctx = map.getContext('2d'); const mimg = new Image(); mimg.src = MINI; const planimg = new Image(); planimg.src = PLAN; let usePlan = true; let mw = 340, mh = 190;
+function sizeMap() { const cssw = map.getBoundingClientRect().width || 340; const d = Math.min(window.devicePixelRatio || 1, 2); mw = Math.round(cssw * d); mh = Math.round(mw * HM / WM); map.width = mw; map.height = mh;
+  const m50 = 50 / WM * cssw; document.getElementById('scalebar').innerHTML = '<span style="display:inline-block;width:' + m50.toFixed(0) + 'px;border-bottom:2px solid #fff;vertical-align:middle"></span> 50 m · noorden ➚'; }
+function drawMap() {
+  mctx.clearRect(0, 0, mw, mh); const im_ = usePlan ? planimg : mimg; if (im_.complete && im_.naturalWidth) mctx.drawImage(im_, 0, 0, mw, mh); const k = mw / WM, u = mw / 340;
+  if (spotGroup.visible) for (const s of S.spots) { mctx.beginPath(); mctx.arc(s.mx * k, s.my * k, 3.4 * u, 0, 7); mctx.fillStyle = s.drone ? '#4fd1ff' : '#ffc83d'; mctx.fill(); mctx.lineWidth = u; mctx.strokeStyle = '#111'; mctx.stroke(); }
+  if (measure) { mctx.beginPath(); mctx.moveTo((measure.x + OX) * k, (measure.z + OZ) * k); mctx.lineTo((pos.x + OX) * k, (pos.z + OZ) * k); mctx.strokeStyle = '#fff'; mctx.lineWidth = 1.5 * u; mctx.stroke(); }
+  const x = (pos.x + OX) * k, y = (pos.z + OZ) * k, fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+  mctx.beginPath(); mctx.moveTo(x + fx * 11 * u, y + fz * 11 * u); mctx.lineTo(x - fz * 5 * u - fx * 5 * u, y + fx * 5 * u - fz * 5 * u); mctx.lineTo(x + fz * 5 * u - fx * 5 * u, y - fx * 5 * u - fz * 5 * u); mctx.closePath();
+  mctx.fillStyle = '#ff3b5c'; mctx.fill(); mctx.strokeStyle = '#fff'; mctx.lineWidth = 1.5 * u; mctx.stroke();
+}
+map.addEventListener('click', e => { const r = map.getBoundingClientRect(); const mx = (e.clientX - r.left) / r.width * WM, my = (e.clientY - r.top) / r.height * HM;
+  let hit = null, bd = 5; for (const s of S.spots) { const d = Math.hypot(s.mx - mx, s.my - my); if (d < bd) { bd = d; hit = s; } }
+  if (hit) { openSpot(hit); return; }
+  const x = mx - OX, z = my - OZ; if (fly || !blocked(x, z)) { pos.x = x; pos.z = z; } });
+// ---------- loop
+const hud = document.getElementById('hud'), prompt = document.getElementById('prompt');
+function resize() { const w = window.innerWidth, h = window.innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); sizeMap(); }
+window.addEventListener('resize', resize); resize();
+const nx = S.north[0], nz = S.north[1]; const COMP = ['N', 'NO', 'O', 'ZO', 'Z', 'ZW', 'W', 'NW'];
+let last = performance.now(), acc = 0, frames = 0, fps = 0, ft = 0;
+function step(now) {
+  requestAnimationFrame(step); const el = now - last; if (cap30 && el < 31) return; last = now; const dt = Math.min(el / 1000, 0.1);
+  frames++; ft += el; if (ft > 500) { fps = Math.round(frames * 1000 / ft); frames = 0; ft = 0; }
+  if (!photoOpen || (cur && !cur.drone)) {
+    const f = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0), r = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+    if (!photoOpen && (f || r || fly)) {
+      const sp = (fly ? 14 : 1.5) * ((keys.ShiftLeft || keys.ShiftRight) ? 3.2 : 1); const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rx = Math.cos(yaw), rz = -Math.sin(yaw);
+      let dx = (fx * f + rx * r), dz = (fz * f + rz * r); const L = Math.hypot(dx, dz) || 1; dx = dx / L * sp * dt; dz = dz / L * sp * dt;
+      if (fly) { pos.x += dx; pos.z += dz; pos.y = Math.max(0.5, Math.min(400, pos.y + ((keys.Space ? 1 : 0) - (keys.KeyC ? 1 : 0)) * sp * dt)); }
+      else { if (!blk(pos.x + dx, pos.z + dz)) { pos.x += dx; pos.z += dz; } else if (!blk(pos.x + dx, pos.z)) pos.x += dx; else if (!blk(pos.x, pos.z + dz)) pos.z += dz; }
+    }
+  }
+  if (photoOpen && ghost) { const va = window.innerWidth / window.innerHeight, ia = cur.drone ? 16 / 9 : 1.5, hf = (cur.drone ? 65.8 : 96.7) * Math.PI / 360;
+    const vf = va >= ia ? 2 * Math.atan(Math.tan(hf) / ia) : 2 * Math.atan(Math.tan(hf) / va); camera.fov = vf * 180 / Math.PI; camera.updateProjectionMatrix(); }
+  else if (camera.fov !== 62) { camera.fov = 62; camera.updateProjectionMatrix(); }
+  levelUpdate(); camera.position.copy(pos); camera.rotation.set(pitch, yaw, 0); renderer.render(scene, camera); drawMap();
+  const fxx = -Math.sin(yaw), fzz = -Math.cos(yaw); let az = Math.atan2(fxx * -nz + fzz * nx, fxx * nx + fzz * nz) * 180 / Math.PI; az = (az + 360) % 360;
+  let t = 'positie <b>' + (pos.x + OX).toFixed(1) + ' m</b> , <b>' + (pos.z + OZ).toFixed(1) + ' m</b> · kijkrichting <b>' + COMP[Math.round(az / 45) % 8] + '</b> (' + az.toFixed(0) + '°)' + (fly ? ' · <b>vliegen</b> ' + pos.y.toFixed(0) + ' m hoog' : '') + ' · ' + fps + ' fps';
+  if (measure) t += '<br>afstand vanaf meetpunt: <b>' + Math.hypot(pos.x - measure.x, pos.z - measure.z).toFixed(2) + ' m</b> (M = wissen)';
+  hud.innerHTML = t;
+  const s = photoOpen ? null : nearest(spotGroup.visible ? 8 : 0); if (s) { prompt.style.display = 'block'; prompt.innerHTML = '<b>F</b> – bekijk de echte foto vanaf standpunt ' + s.label; } else prompt.style.display = 'none';
+}
+document.getElementById('go').addEventListener('click', () => { document.getElementById('start').style.display = 'none'; canvas.click(); });
+let deck = null, inStair = false, night = false;
+function blk(x, z) { if (deck) return !(inPoly(deck.poly, x, z) || inPoly(deck.stair, x, z)); return blocked(x, z); }
+function levelUpdate() { if (fly) { deck = null; return; }
+  let st = null; for (const d of (S.decks || [])) if (inPoly(d.stair, pos.x, pos.z)) st = d;
+  if (st) { if (!inStair) { inStair = true; deck = deck ? null : st; } } else inStair = false;
+  if (deck && !(inPoly(deck.poly, pos.x, pos.z) || inPoly(deck.stair, pos.x, pos.z))) deck = null;
+  const ty = EYE + (deck ? deck.h : 0); pos.y += (ty - pos.y) * 0.25; if (Math.abs(ty - pos.y) < 0.01) pos.y = ty; }
+function setNight(v) { night = v; const c = v ? 0x0b1026 : 0x9fb4c8; scene.background.setHex(c); scene.fog.color.setHex(c); hemi.intensity = v ? 0.3 : 0.95; sun.intensity = v ? 0.08 : 0.55; matTex.color.setHex(v ? 0x565c74 : 0xffffff); matBan.color.setHex(v ? 0xc4c4d2 : 0xffffff); }
+spotGroup.visible = false;
+if (S.start) { pos.x = S.start[0]; pos.z = S.start[1]; setDir(S.start[2], S.start[3], 0); }
+window.__dbg = {get deck() { return deck; }, get night() { return night; }, setNight, pos, set(x, z, dx, dz, y) { pos.x = x - OX; pos.z = z - OZ; pos.y = y || EYE; if (y && y > 3) fly = true; setDir(dx, dz, 0); }, setPitch(p) { pitch = p * Math.PI / 180; }, openSpot, spots: S.spots, tris, blocked};
+requestAnimationFrame(step);
+</script>
+</body></html>
